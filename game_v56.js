@@ -3597,32 +3597,27 @@ function spawnVillager(typeData, milestone, isRevisitor = false) {
 
     const info = currentPlanet.unlockedVillagersInfo[typeData.id];
 
-    // プレイヤーの位置を取得し、地表上のベース位置を算出
-    const pPos = new THREE.Vector3();
-    player.getWorldPosition(pPos);
-    const pBase = pPos.clone().normalize().multiplyScalar(ASTEROID_RADIUS);
-
-    const pNormal = pBase.clone().normalize();
-    let tangent = new THREE.Vector3(1, 0, 0).projectOnPlane(pNormal).normalize();
-    if (tangent.lengthSq() < 0.01) {
-        tangent = new THREE.Vector3(0, 0, 1).projectOnPlane(pNormal).normalize();
-    }
-    const bitangent = new THREE.Vector3().crossVectors(pNormal, tangent).normalize();
-
     const rocketRadius = 0.82 * 2.5; // ロケットの半径 (巨大化スケール2.5倍)
     const minDistance = 2 * rocketRadius; // ロケット2台分の半径 (約4.1)
 
     let localPos = null;
     
+    // 小惑星上の完全にランダムな位置を生成する関数
+    function getRandomSpherePoint() {
+        const u = Math.random();
+        const v = Math.random();
+        const theta = u * 2.0 * Math.PI;
+        const phi = Math.acos(2.0 * v - 1.0);
+        return new THREE.Vector3(
+            Math.sin(phi) * Math.cos(theta),
+            Math.sin(phi) * Math.sin(theta),
+            Math.cos(phi)
+        ).normalize().multiplyScalar(ASTEROID_RADIUS);
+    }
+    
     // 他のロケットと重ならない位置を探索
     for (let attempt = 0; attempt < 100; attempt++) {
-        const angle = Math.random() * Math.PI * 2;
-        // プレイヤーの近く（5.0 〜 10.0 ユニット離れた位置）
-        const dist = 5.0 + Math.random() * 5.0; 
-        const candPos = pBase.clone()
-            .addScaledVector(tangent, Math.cos(angle) * dist)
-            .addScaledVector(bitangent, Math.sin(angle) * dist)
-            .normalize().multiplyScalar(ASTEROID_RADIUS);
+        const candPos = getRandomSpherePoint();
             
         let tooClose = false;
         for (const v of currentPlanet.activeVillagers) {
@@ -3650,13 +3645,9 @@ function spawnVillager(typeData, milestone, isRevisitor = false) {
         }
     }
     
-    // 見つからなかった場合のフォールバック（少し離れた位置にする）
+    // 見つからなかった場合のフォールバック（再度ランダム生成）
     if (!localPos) {
-        const angle = Math.random() * Math.PI * 2;
-        localPos = pBase.clone()
-            .addScaledVector(tangent, Math.cos(angle) * 12.0)
-            .addScaledVector(bitangent, Math.sin(angle) * 12.0)
-            .normalize().multiplyScalar(ASTEROID_RADIUS);
+        localPos = getRandomSpherePoint();
     }
 
     group.position.copy(localPos);
@@ -3719,7 +3710,8 @@ function spawnVillager(typeData, milestone, isRevisitor = false) {
         settleReqFlower: info.settleReqFlower, // 定住申し込みに必要な花の数
         settleReqTree:   info.settleReqTree,   // 定住申し込みに必要な木の数
         isRevisitor: isRevisitor, // 再来した住人かどうか
-        hasSpokenThisVisit: false // この来訪で話しかけられたかどうか
+        hasSpokenThisVisit: false, // この来訪で話しかけられたかどうか
+        followCooldownTimer: 0.0 // 主人公に近寄るクールダウンタイマー
     };
 
     currentPlanet.activeVillagers.push(instance);
@@ -4626,8 +4618,8 @@ function updatePortalVisibility(showDialogue = false) {
     if (!warpPortalGroup) return;
 
     const settledCount = currentPlanet.activeVillagers.filter(v => v.settled).length;
-    // 閾値：定住住人が1人以上
-    const isUnlocked = settledCount >= 1;
+    // 閾値：定住住人が1人以上。ただしはじめの星(artemis)以外はすでに存在しているようにする
+    const isUnlocked = (currentPlanet.id !== "artemis") || (settledCount >= 1);
 
     warpPortalGroup.visible = isUnlocked;
 
@@ -5052,6 +5044,7 @@ function collectSeed() {
     
     if (nearestPlant && minDist <= 2.5) {
         nearestPlant.harvestedSeed = true;
+        nearestPlant.seedCooldown = 25.0;
         
         let itemKey = "";
         let itemName = "";
@@ -5479,6 +5472,7 @@ function executeWarp(targetPlanetId) {
                 }
             }
             
+            attachSeedSaplingMesh(p);
             p.scale = 0.01;
             p.mesh.scale.set(0.01, 0.01, 0.01);
             
@@ -5970,6 +5964,13 @@ function updateVillagers(delta) {
         const v = villagers[idx];
         v.age += delta;
 
+        if (v.followCooldownTimer === undefined) {
+            v.followCooldownTimer = 0.0;
+        }
+        if (v.followCooldownTimer > 0) {
+            v.followCooldownTimer -= delta;
+        }
+
         const vWorldPos = new THREE.Vector3();
         v.group.getWorldPosition(vWorldPos);
         const distToPlayer = playerWorldPos.distanceTo(vWorldPos);
@@ -6367,11 +6368,13 @@ function updateVillagers(delta) {
         const canFollow = (v.state !== "LEAVING" && v.state !== "LEAVING_PENDING" && 
                            v.state !== "GO_TO_ROCKET" && v.state !== "APPROACH_BUTTON" && 
                            v.state !== "PRESS_BUTTON" && v.state !== "HOUSE_MUTATION" &&
-                           v.state !== "WANDERING_TO_EAT" && v.state !== "EATING" && !v.happyJumpCount);
+                           v.state !== "WANDERING_TO_EAT" && v.state !== "EATING" && !v.happyJumpCount &&
+                           v.followCooldownTimer <= 0);
         if (canFollow) {
             if (distToPlayer < 7.0) {
                 if (v.state !== "APPROACH_PLAYER") {
                     v.state = "APPROACH_PLAYER";
+                    v.stateTimer = 4.0 + Math.random() * 3.0; // 4〜7秒間追従する
                     spawnEmotionIcon(v.group, Math.random() < 0.5 ? 'notice' : 'star');
                 }
             } else if (v.state === "APPROACH_PLAYER" && distToPlayer >= 8.5) {
@@ -6635,6 +6638,21 @@ function updateVillagers(delta) {
                 faceVillagerToPlayer(v);
             }
         } else if (v.state === "APPROACH_PLAYER") {
+            // 追従時間制限の処理
+            if (v.stateTimer === undefined) {
+                v.stateTimer = 4.0 + Math.random() * 3.0;
+            }
+            v.stateTimer -= delta;
+            if (v.stateTimer <= 0) {
+                v.state = "IDLE";
+                v.stateTimer = 2.0 + Math.random() * 2.0;
+                v.followCooldownTimer = 12.0 + Math.random() * 6.0; // 12〜18秒クールダウン
+                v.group.getObjectByName("leftLeg").rotation.x = 0;
+                v.group.getObjectByName("rightLeg").rotation.x = 0;
+                v.visualGroup.position.y = Math.sin(v.age * 2.0) * 0.022;
+                continue;
+            }
+
             const localPlayerPos = new THREE.Vector3(0, ASTEROID_RADIUS, 0);
             asteroid.worldToLocal(localPlayerPos);
             v.targetPos.copy(localPlayerPos);
@@ -7575,7 +7593,8 @@ function plantObjectAtGrid(type) {
         type: type,
         subtype: subtype,
         light: null,
-        harvestedSeed: false // 採取可能かどうかのフラグ
+        harvestedSeed: false, // 採取可能かどうかのフラグ
+        seedCooldown: 0
     };
 
     // 木の場合、果実の初期実り状態を設定
@@ -7589,6 +7608,7 @@ function plantObjectAtGrid(type) {
         plantObj.fruitProgress = new Array(fruitMeshes.length).fill(0.0); // 最初は実っていない状態 (少し立たないと実がならない)
     }
 
+    attachSeedSaplingMesh(plantObj);
     plants.push(plantObj);
 
     playPlantSound();
@@ -7600,6 +7620,46 @@ function plantObjectAtGrid(type) {
     updateStatsUI();
     playerBounce = 0.28;
     saveGame(false);
+}
+
+
+function attachSeedSaplingMesh(plantObj) {
+    const visualGroup = plantObj.visualGroup;
+    const type = plantObj.type;
+    
+    // 既存の種・苗メッシュがあれば削除してクリーンにする
+    const oldSeed = visualGroup.getObjectByName("seed_mesh");
+    if (oldSeed) visualGroup.remove(oldSeed);
+    const oldSapling = visualGroup.getObjectByName("sapling_mesh");
+    if (oldSapling) visualGroup.remove(oldSapling);
+
+    if (type === 'flower') {
+        // 花の上の種 (きらめく球体)
+        const seedGeom = new THREE.SphereGeometry(0.08, 6, 6);
+        const seedMat = new THREE.MeshStandardMaterial({
+            color: 0xffe600,
+            emissive: 0xffaa00,
+            emissiveIntensity: 1.5,
+            roughness: 0.2
+        });
+        const seedMesh = new THREE.Mesh(seedGeom, seedMat);
+        seedMesh.name = "seed_mesh";
+        seedMesh.position.set(0, 0.85, 0); // 花の上部
+        visualGroup.add(seedMesh);
+    } else {
+        // 木の上の苗 (緑の芽/円錐型)
+        const saplingGeom = new THREE.ConeGeometry(0.12, 0.28, 5);
+        const saplingMat = new THREE.MeshStandardMaterial({
+            color: 0x00ff88,
+            emissive: 0x00cc44,
+            emissiveIntensity: 1.2,
+            roughness: 0.3
+        });
+        const saplingMesh = new THREE.Mesh(saplingGeom, saplingMat);
+        saplingMesh.name = "sapling_mesh";
+        saplingMesh.position.set(0, 1.8, 0); // 木の上部
+        visualGroup.add(saplingMesh);
+    }
 }
 
 // ==========================================
@@ -8737,6 +8797,39 @@ function animate() {
         p.visualGroup.rotation.z = Math.sin(p.age * 1.8 + i) * 0.035;
         p.visualGroup.rotation.x = Math.cos(p.age * 1.3 + i) * 0.02;
         p.visualGroup.rotation.y = Math.sin(p.age * 0.5 + i) * 0.04;
+
+        // 種・苗のクールダウン更新
+        if (p.seedCooldown === undefined) {
+            p.seedCooldown = 0;
+        }
+        if (p.harvestedSeed) {
+            if (p.seedCooldown <= 0) {
+                p.seedCooldown = 25.0; // セーブデータ復元時などのフォールバック
+            }
+            p.seedCooldown -= delta;
+            if (p.seedCooldown <= 0) {
+                p.harvestedSeed = false;
+                p.seedCooldown = 0;
+                spawnPlantSparks(p.localPos, p.type);
+            }
+        }
+
+        // 種・苗メッシュのビジュアル更新
+        const seedMesh = p.visualGroup.getObjectByName("seed_mesh");
+        const saplingMesh = p.visualGroup.getObjectByName("sapling_mesh");
+        const targetMesh = seedMesh || saplingMesh;
+        if (targetMesh) {
+            if (p.harvestedSeed) {
+                targetMesh.scale.set(0, 0, 0);
+                targetMesh.visible = false;
+            } else {
+                targetMesh.visible = true;
+                const s = 1.0 + Math.sin(p.age * 3.0) * 0.15;
+                targetMesh.scale.set(s, s, s);
+                targetMesh.position.y = (p.type === 'flower' ? 0.85 : 1.8) + Math.sin(p.age * 2.0) * 0.05;
+                targetMesh.rotation.y += delta * 1.5;
+            }
+        }
 
         // キラキラ粒子の舞い散り
         if (p.scale > p.targetScale * 0.8) {
@@ -10196,6 +10289,7 @@ function saveGame(showToast = false) {
             type: plant.type,
             subtype: plant.subtype,
             harvestedSeed: plant.harvestedSeed,
+            seedCooldown: plant.seedCooldown || 0,
             fruitProgress: plant.fruitProgress || []
         }));
 
@@ -10291,6 +10385,7 @@ function loadGame() {
                     subtype: spObj.subtype,
                     light: null,
                     harvestedSeed: spObj.harvestedSeed,
+                    seedCooldown: spObj.seedCooldown || 0,
                     fruitProgress: spObj.fruitProgress || []
                 };
 
@@ -10503,6 +10598,7 @@ function rebuildCurrentPlanetScene() {
             }
         }
         
+        attachSeedSaplingMesh(p);
         p.mesh.scale.set(p.scale, p.scale, p.scale);
         
         if (p.type === 'tree') {
