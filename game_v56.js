@@ -1888,8 +1888,113 @@ function drawPlayerFace(expression) {
         ctx.arc(rightEyeX, eyeY, 16, 0, Math.PI * 2);
         ctx.fill();
     } else if (expression === "WALKING") {
+        ctx.ellipse(leftEyeX, eyeY, 18, 12, -0.15, 0, Math.PI * 2);
+        ctx.ellipse(rightEyeX, eyeY, 18, 12, 0.15, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (expression === "TALKING") {
         ctx.beginPath();
-        const villagerTypes = [
+        ctx.arc(leftEyeX, eyeY + 6, 16, Math.PI, 0, false);
+        ctx.arc(rightEyeX, eyeY + 6, 16, Math.PI, 0, false);
+        ctx.stroke();
+    } else {
+        ctx.beginPath();
+        ctx.ellipse(leftEyeX, eyeY, 18, 12, 0, 0, Math.PI * 2);
+        ctx.ellipse(rightEyeX, eyeY, 18, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
+    if (playerFaceTexture) {
+        playerFaceTexture.needsUpdate = true;
+    }
+}
+
+function createPlayer() {
+    const bodyGeom = new THREE.CylinderGeometry(0.4, 0.4, 0.9, 12);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff6b35, roughness: 0.4 });
+    const body = new THREE.Mesh(bodyGeom, bodyMat);
+    body.position.y = 0.45;
+    body.castShadow = true;
+    playerGroup.add(body);
+
+    const headGeom = new THREE.SphereGeometry(0.38, 16, 16);
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+    const head = new THREE.Mesh(headGeom, headMat);
+    head.position.set(0, 0.8, 0);
+    head.castShadow = true;
+    playerGroup.add(head);
+
+    const visorGeom = new THREE.SphereGeometry(0.32, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    const visorMat = new THREE.MeshStandardMaterial({ 
+        color: 0x00bfff, 
+        emissive: 0x00f0ff,
+        emissiveIntensity: 0.7,
+        roughness: 0.1
+    });
+    const visor = new THREE.Mesh(visorGeom, visorMat);
+    visor.position.set(0, 0.8, 0.12);
+    visor.rotation.x = Math.PI / 2.5;
+    playerGroup.add(visor);
+
+    // 表情用テクスチャと部分球面メッシュの追加
+    drawPlayerFace("NORMAL");
+    playerFaceTexture = new THREE.CanvasTexture(playerFaceCanvas);
+    const faceGeom = new THREE.SphereGeometry(0.323, 16, 16, -Math.PI / 3, Math.PI * 2 / 3, 0.05, Math.PI / 2.6);
+    const faceMat = new THREE.MeshBasicMaterial({
+        map: playerFaceTexture,
+        transparent: true,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1
+    });
+    const faceMesh = new THREE.Mesh(faceGeom, faceMat);
+    faceMesh.name = "faceMesh";
+    visor.add(faceMesh);
+
+    const packGeom = new THREE.BoxGeometry(0.5, 0.6, 0.35);
+    const packMat = new THREE.MeshStandardMaterial({ color: 0xffd166, roughness: 0.5 });
+    const pack = new THREE.Mesh(packGeom, packMat);
+    pack.position.set(0, 0.45, -0.35);
+    pack.castShadow = true;
+    playerGroup.add(pack);
+
+    const legGeom = new THREE.CylinderGeometry(0.12, 0.12, 0.3, 8);
+    const legMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+    
+    const leftLeg = new THREE.Mesh(legGeom, legMat);
+    leftLeg.position.set(-0.2, 0.15, 0);
+    leftLeg.castShadow = true;
+    leftLeg.name = "leftLeg";
+    playerGroup.add(leftLeg);
+
+    const rightLeg = new THREE.Mesh(legGeom, legMat);
+    rightLeg.position.set(0.2, 0.15, 0);
+    rightLeg.castShadow = true;
+    rightLeg.name = "rightLeg";
+    playerGroup.add(rightLeg);
+
+    const armGeom = new THREE.SphereGeometry(0.12, 8, 8);
+    const armMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    
+    const leftArm = new THREE.Mesh(armGeom, armMat);
+    leftArm.position.set(-0.5, 0.5, 0);
+    leftArm.name = "leftArm";
+    playerGroup.add(leftArm);
+
+    const rightArm = new THREE.Mesh(armGeom, armMat);
+    rightArm.position.set(0.5, 0.5, 0);
+    rightArm.name = "rightArm";
+    playerGroup.add(rightArm);
+
+    playerGroup.position.copy(playerLocalPos);
+    scene.add(playerGroup);
+    player = playerGroup;
+}
+createPlayer();
+
+// ==========================================
+// 15種類のどうぶつ住人の定義と3Dモデリング
+// ==========================================
+const villagerTypes = [
     {
         id: "cat",
         name: "ニャンコ",
@@ -2061,7 +2166,7 @@ function drawPlayerFace(expression) {
         dialogues: [
             "ピピッ……この星のエネルギーフィールドは非常に安定しているゾル。センス優秀ゾル。",
             "地球の植物と宇宙のネオンの融合……大絶賛に値する芸術ゾル！",
-            "遠い銀河から来たが、ここが一番落ち着くポータブル星ゾル。感謝するゾル。",
+            "遠い銀河から来たが、ここが一番落ち着くポータブル星ゾル. 感謝するゾル。",
             "君が開拓したこの大地、極めて高度な文明的テラフォーミングゾル！"
         ],
         negotiation: "ピピッ！私のインテリジェンスがここに定住することを推奨しているゾル。正式な定住を許可してほしいゾル！"
@@ -2130,168 +2235,7 @@ function drawPlayerFace(expression) {
         ],
         negotiation: "キキッ！決めたリス！この星に定住して、木の実の貯蔵庫を作りたいリス！ここに住んでもいいリス？"
     }
-];�やし効果は極上クオリティだクマ！大したものクマ！",
-            "小惑星がこんなに美しく生まれ変わるなんて感動したクマ！君のセンスは一流クマ！",
-            "この柔らかい草の上でお昼寝するのが最近の夢クマ。本当にいい環境をありがとうクマ！",
-            "これほど綺麗な景色に囲まれるのは久しぶりクマ！君の努力を私は大絶賛するクマ！"
-        ],
-        negotiation: "うむ、決めたクマ！私をこの星の正式な住人として、定住させてはくれないクマ？ずっと星を見守りたいクマ！"
-    },
-    {
-        id: "bee",
-        name: "ハチスケ",
-        suitColor: 0xffe066, 
-        voicePitch: 1.4,
-        earType: "bee",
-        dialogues: [
-            "ブーン！お花がいっぱいで、とってもいい香りのする星だブーン！センス最高だブーン！",
-            "木は一本もないのに、こんなに綺麗な花がたくさん咲いているなんて、ここは天国だブーン！",
-            "お花畑を飛び回るのが本当に楽しいブーン！君に大感謝だブーン！",
-            "ハチミツがたくさん取れそうな予感がするブーン！君のお花の開拓センスは大絶賛だブーン！"
-        ],
-        negotiation: "実は、このお花だらけの星がすごく気に入っちゃったブーン！ずっとここに定住して、美味しいハチミツを集めてあげたいブーン！いいブーン？"
-    },
-    {
-        id: "koala",
-        name: "コアラノシン",
-        suitColor: 0xa8a8a8, 
-        voicePitch: 0.6,
-        earType: "koala",
-        dialogues: [
-            "ふあぁ……木がたくさん生い茂っていて、木登りに最高の星だコアラ……のんびりできるコアラ……",
-            "お花は全然ないけれど、この豊かな森 of 匂い、すっごく落ち着くコアラ……センス抜群コアラ。",
-            "美味しい葉っぱがたくさん茂るこの木、大絶賛コアラ！のぼり心地も最高コアラ〜",
-            "木陰でお昼寝するのが一番の幸せコアラ。こんな静かな森を作ってくれてありがとうコアラ。"
-        ],
-        negotiation: "ふむ……この静かな森がとても気に入ったコアラ。ここに定住して、のんびり暮らしてもいいコアラ？"
-    },
-    {
-        id: "fox",
-        name: "コン太",
-        suitColor: 0xff7a00, 
-        voicePitch: 1.1,
-        earType: "fox",
-        dialogues: [
-            "コンコン！この星はどこか不思議な魅力に満ちているコン！センス最高だコン！",
-            "こんなにキラキラした星で遊べるなんて、狐冥利に尽きるコン！大絶賛だコン！",
-            "君の作ったこの景色、ずっと眺めていても飽きないコン！本当にありがとうコン！",
-            "風が心地よく通り抜けていくコン！君が開拓したこの星は極上コン！"
-        ],
-        negotiation: "コンコン！実はこの美しい星が気に入っちゃったコン。ここに定住して、ずっと君とお喋りしたいコン！いいコン？"
-    },
-    {
-        id: "mouse",
-        name: "チュウ助",
-        suitColor: 0x9bafd9, 
-        voicePitch: 1.55,
-        earType: "mouse",
-        dialogues: [
-            "チュウ！こんなに広い星を自由に走り回れるなんてハッピーだチュウ！",
-            "あちこち探検するのがワクワクするチュウ！君のセンスは最高だチュウ！",
-            "こんなに綺麗な花や木を植えてくれて感謝だチュウ！大絶賛するチュウ！",
-            "小さくて可愛いものがたくさんあって、落ち着く星だチュウ！"
-        ],
-        negotiation: "チュウ！僕もこの小惑星の住人になりたいチュウ！隅っこに定住させてほしいチュウ！いいチュウ？"
-    },
-    {
-        id: "pig",
-        name: "ぶう太",
-        suitColor: 0xffc0cb, 
-        voicePitch: 0.8,
-        earType: "pig",
-        dialogues: [
-            "ブヒッ！この星の土はとっても掘りやすくて心地よいブヒ！",
-            "美味しい食べ物がたくさん育ちそうな素晴らしい星だブヒ！大絶賛ブヒ！",
-            "君が植えてくれた植物のおかげで、空気がとっても美味しいブヒ！",
-            "のんびりゴロゴロするのに最高の場所だブヒ！君の開拓センスに感謝ブヒ！"
-        ],
-        negotiation: "ブヒッ！決めたブヒ！この住み心地の良い星に定住して、ずっと暮らしたいブヒ！お許しをブヒ？"
-    },
-    {
-        id: "frog",
-        name: "ケロ助",
-        suitColor: 0x5cd65c, 
-        voicePitch: 1.2,
-        earType: "frog",
-        dialogues: [
-            "ケロケロ！水辺や高台があって、跳ねるのがとっても楽しいケロ！",
-            "この星の湿度がボクにとって快適すぎるケロ！君のセンスは大絶賛ケロ！",
-            "綺麗な植物たちに囲まれて、毎日がフェスティバルケロ！ありがとうケロ！",
-            "こんな夢のような小惑星を開拓するなんて、君はすごいテラフォーマーケロ！"
-        ],
-        negotiation: "ケロケロ！ボク、この星に定住して、ずっと大ジャンプしていたいケロ！ここに住んでもいいケロ？"
-    },
-    {
-        id: "alien",
-        name: "ゾルゲル",
-        suitColor: 0xbc13fe, 
-        voicePitch: 0.95,
-        earType: "alien",
-        dialogues: [
-            "ピピッ……この星のエネルギーフィールドは非常に安定しているゾル。センス優秀ゾル。",
-            "地球の植物と宇宙のネオンの融合……大絶賛に値する芸術ゾル！",
-            "遠い銀河から来たが、ここが一番落ち着くポータブル星ゾル。感謝するゾル。",
-            "君が開拓したこの大地、極めて高度な文明的テラフォーミングゾル！"
-        ],
-        negotiation: "ピピッ！私のインテリジェンスがここに定住することを推奨しているゾル。正式な定住を許可してほしいゾル！"
-    },
-    {
-        id: "panda",
-        name: "パン助",
-        suitColor: 0x333333, 
-        voicePitch: 0.75,
-        earType: "panda",
-        dialogues: [
-            "パオーン？いや、パンダだから笹が食べたいパン！でもこの星の植物も綺麗で美味しいパン！",
-            "白と黒の対比が美しいこの星の景色、大絶賛だパン！センス抜群パン！",
-            "木陰で笹（？）をかじりながら星空を見るのがお気に入りだパン。ありがとうパン！",
-            "のんびり転がっているだけでハッピーになれる星だパン。君のおかげだパン！"
-        ],
-        negotiation: "うむ、この星に定住するパン！毎日美味しい空気を吸って、君とゴロゴロしたいパン！いいパン？"
-    },
-    {
-        id: "monkey",
-        name: "サル吉",
-        suitColor: 0xb5651d, 
-        voicePitch: 1.15,
-        earType: "monkey",
-        dialogues: [
-            "ウキッ！高いところがいっぱいで最高にアクティブになれる星だウキ！",
-            "君が植えてくれた木々は、どれも登りやすくて最高だウキ！大絶賛ウキ！",
-            "あっちの惑星からこっちの惑星まで飛び回るのも楽しいウキ！センス最高ウキ！",
-            "美味しい果物をたくさん実らせてくれてありがとうウキ！ウキウキするウキ！"
-        ],
-        negotiation: "ウキッ！このアクティブで美味しい星に定住したいウキ！毎日木登りして暮らしたいウキ！お許しをウキ！"
-    },
-    {
-        id: "sheep",
-        name: "メエ子",
-        suitColor: 0xf5f5f5, 
-        voicePitch: 1.3,
-        earType: "sheep",
-        dialogues: [
-            "メェ〜！ふわふわの草が生い茂っていて、食べてしまいたいほど素敵メェ！",
-            "空に浮かぶ星々がとっても優しく輝いているメェ。センスの塊メェ！",
-            "こんな綺麗な星でお散歩できるなんて、夢のようだメェ。大絶賛メェ！",
-            "優しくて暖かみのあるこの大地、作ってくれてありがとうメェ〜"
-        ],
-        negotiation: "メェ〜！実はこの居心地の良い星に定住したいメェ。ずっとここで草をはんでいたいメェ。いいメェ？"
-    },
-    {
-        id: "squirrel",
-        name: "リスミ",
-        suitColor: 0xe67e22, 
-        voicePitch: 1.45,
-        earType: "squirrel",
-        dialogues: [
-            "キキッ！木の実がたくさん収穫できそうな大好物の星だリス！センス抜群だリス！",
-            "このしっぽを振り回して走りたくなる軽快な星だリス！大絶賛だリス！",
-            "たくさん木を植えてくれてありがとうリス！木漏れ日が最高だリス！",
-            "宇宙の中で一番お気に入りの秘密基地になりそうだリス！感謝だリス！"
-        ],
-        negotiation: "キキッ！決めたリス！この星に定住して、木の実の貯蔵庫を作りたいリス！ここに住んでもいいリス？"
-    }
-];
+]
 
 // ハートの愛でる演出パーティクル
 const adorationParticles = [];
@@ -3620,7 +3564,6 @@ function createVillagerMesh(typeData) {
     visualGroup.scale.set(scaleVal, scaleVal, scaleVal);
 
     return { group, visualGroup, beacon };
-};
 }
 
 // 住人の新規作成・小惑星への出現処理
