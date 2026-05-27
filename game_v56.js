@@ -1234,6 +1234,30 @@ function createDirtTexture(theme) {
     return texture;
 }
 
+let cachedLeafGeom = null;
+function getLeafGeometry() {
+    if (!cachedLeafGeom) {
+        cachedLeafGeom = new THREE.SphereGeometry(0.18, 8, 8);
+        cachedLeafGeom.scale(1.4, 0.5, 0.85); 
+        cachedLeafGeom.translate(0, 0.04, 0); 
+    }
+    return cachedLeafGeom;
+}
+
+const grassMaterialCache = new Map();
+function getGrassMaterial(color) {
+    if (!grassMaterialCache.has(color)) {
+        grassMaterialCache.set(color, new THREE.MeshStandardMaterial({
+            color: color,
+            emissive: color,
+            emissiveIntensity: 0.28,
+            roughness: 0.65,
+            flatShading: false
+        }));
+    }
+    return grassMaterialCache.get(color);
+}
+
 // 草オブジェクト
 function createGrassClump(theme) {
     const group = new THREE.Group();
@@ -1246,22 +1270,14 @@ function createGrassClump(theme) {
         colors = [0xffd700, 0xffea4a, 0xffaa00, 0xfff68f, 0xfff8d0]; 
     }
     
-    const leafGeom = new THREE.SphereGeometry(0.18, 8, 8);
-    leafGeom.scale(1.4, 0.5, 0.85); 
-    leafGeom.translate(0, 0.04, 0); 
+    const leafGeom = getLeafGeometry();
     
     for (let i = 0; i < bladeCount; i++) {
         const col = colors[Math.floor(Math.random() * colors.length)];
-        const mat = new THREE.MeshStandardMaterial({
-            color: col,
-            emissive: col,
-            emissiveIntensity: 0.28,
-            roughness: 0.65,
-            flatShading: false
-        });
+        const mat = getGrassMaterial(col);
         
         const blade = new THREE.Mesh(leafGeom, mat);
-        blade.castShadow = true;
+        // blade.castShadow = true; // 軽量化のため影を無効化
         
         const angle = (i / bladeCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.2;
         const tilt = 0.75 + Math.random() * 0.4;
@@ -1873,117 +1889,13 @@ function drawPlayerFace(expression) {
         ctx.fill();
     } else if (expression === "WALKING") {
         ctx.beginPath();
-        ctx.ellipse(leftEyeX, eyeY, 18, 12, -0.15, 0, Math.PI * 2);
-        ctx.ellipse(rightEyeX, eyeY, 18, 12, 0.15, 0, Math.PI * 2);
-        ctx.fill();
-    } else if (expression === "TALKING") {
-        ctx.beginPath();
-        ctx.arc(leftEyeX, eyeY + 6, 16, Math.PI, 0, false);
-        ctx.arc(rightEyeX, eyeY + 6, 16, Math.PI, 0, false);
-        ctx.stroke();
-    } else {
-        ctx.beginPath();
-        ctx.ellipse(leftEyeX, eyeY, 18, 12, 0, 0, Math.PI * 2);
-        ctx.ellipse(rightEyeX, eyeY, 18, 12, 0, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    
-    if (playerFaceTexture) {
-        playerFaceTexture.needsUpdate = true;
-    }
-}
-
-function createPlayer() {
-    const bodyGeom = new THREE.CylinderGeometry(0.4, 0.4, 0.9, 12);
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff6b35, roughness: 0.4 });
-    const body = new THREE.Mesh(bodyGeom, bodyMat);
-    body.position.y = 0.45;
-    body.castShadow = true;
-    playerGroup.add(body);
-
-    const headGeom = new THREE.SphereGeometry(0.38, 16, 16);
-    const headMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
-    const head = new THREE.Mesh(headGeom, headMat);
-    head.position.set(0, 0.8, 0);
-    head.castShadow = true;
-    playerGroup.add(head);
-
-    const visorGeom = new THREE.SphereGeometry(0.32, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-    const visorMat = new THREE.MeshStandardMaterial({ 
-        color: 0x00bfff, 
-        emissive: 0x00f0ff,
-        emissiveIntensity: 0.7,
-        roughness: 0.1
-    });
-    const visor = new THREE.Mesh(visorGeom, visorMat);
-    visor.position.set(0, 0.8, 0.12);
-    visor.rotation.x = Math.PI / 2.5;
-    playerGroup.add(visor);
-
-    // 表情用テクスチャと部分球面メッシュの追加
-    drawPlayerFace("NORMAL");
-    playerFaceTexture = new THREE.CanvasTexture(playerFaceCanvas);
-    const faceGeom = new THREE.SphereGeometry(0.323, 16, 16, -Math.PI / 3, Math.PI * 2 / 3, 0.05, Math.PI / 2.6);
-    const faceMat = new THREE.MeshBasicMaterial({
-        map: playerFaceTexture,
-        transparent: true,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -1
-    });
-    const faceMesh = new THREE.Mesh(faceGeom, faceMat);
-    faceMesh.name = "faceMesh";
-    visor.add(faceMesh);
-
-    const packGeom = new THREE.BoxGeometry(0.5, 0.6, 0.35);
-    const packMat = new THREE.MeshStandardMaterial({ color: 0xffd166, roughness: 0.5 });
-    const pack = new THREE.Mesh(packGeom, packMat);
-    pack.position.set(0, 0.45, -0.35);
-    pack.castShadow = true;
-    playerGroup.add(pack);
-
-    const legGeom = new THREE.CylinderGeometry(0.12, 0.12, 0.3, 8);
-    const legMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
-    
-    const leftLeg = new THREE.Mesh(legGeom, legMat);
-    leftLeg.position.set(-0.2, 0.15, 0);
-    leftLeg.castShadow = true;
-    leftLeg.name = "leftLeg";
-    playerGroup.add(leftLeg);
-
-    const rightLeg = new THREE.Mesh(legGeom, legMat);
-    rightLeg.position.set(0.2, 0.15, 0);
-    rightLeg.castShadow = true;
-    rightLeg.name = "rightLeg";
-    playerGroup.add(rightLeg);
-
-    const armGeom = new THREE.SphereGeometry(0.12, 8, 8);
-    const armMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-    
-    const leftArm = new THREE.Mesh(armGeom, armMat);
-    leftArm.position.set(-0.5, 0.5, 0);
-    leftArm.name = "leftArm";
-    playerGroup.add(leftArm);
-
-    const rightArm = new THREE.Mesh(armGeom, armMat);
-    rightArm.position.set(0.5, 0.5, 0);
-    rightArm.name = "rightArm";
-    playerGroup.add(rightArm);
-
-    playerGroup.position.copy(playerLocalPos);
-    scene.add(playerGroup);
-    player = playerGroup;
-}
-createPlayer();
-
-// ==========================================
-// 4種類のどうぶつ住人の定義と3Dモデリング
-// ==========================================
-const villagerTypes = [
+        const villagerTypes = [
     {
         id: "cat",
         name: "ニャンコ",
         suitColor: 0xffb5c5, 
+        skinColor: 0xfff0db,
+        scale: 0.95,
         voicePitch: 1.0,
         earType: "cat",
         dialogues: [
@@ -1998,6 +1910,8 @@ const villagerTypes = [
         id: "rabbit",
         name: "ウサ吉",
         suitColor: 0x98ffeb, 
+        skinColor: 0xffffff,
+        scale: 0.9,
         voicePitch: 1.25,
         earType: "rabbit",
         dialogues: [
@@ -2012,6 +1926,8 @@ const villagerTypes = [
         id: "dog",
         name: "ワン太",
         suitColor: 0xffe298, 
+        skinColor: 0xd7a15c,
+        scale: 1.0,
         voicePitch: 0.85,
         earType: "dog",
         dialogues: [
@@ -2026,10 +1942,195 @@ const villagerTypes = [
         id: "bear",
         name: "クマ五郎",
         suitColor: 0xd8b5ff, 
+        skinColor: 0x8b5a2b,
+        scale: 1.2,
         voicePitch: 0.7,
         earType: "bear",
         dialogues: [
             "ふむ、この星のネオン植物たちの癒やし効果は極上クオリティだクマ！大したものクマ！",
+            "小惑星がこんなに美しく生まれ変わるなんて感動したクマ！君のセンスは一流クマ！",
+            "この柔らかい草の上でお昼寝するのが最近の夢クマ。本当にいい環境をありがとうクマ！",
+            "これほど綺麗な景色に囲まれるのは久しぶりクマ！君の努力を私は大絶賛するクマ！"
+        ],
+        negotiation: "うむ、決めたクマ！私をこの星の正式な住人として、定住させてはくれないクマ？ずっと星を見守りたいクマ！"
+    },
+    {
+        id: "bee",
+        name: "ハチスケ",
+        suitColor: 0xffe066, 
+        skinColor: 0x222222,
+        scale: 0.85,
+        voicePitch: 1.4,
+        earType: "bee",
+        dialogues: [
+            "ブーン！お花がいっぱいで、とってもいい香りのする星だブーン！センス最高だブーン！",
+            "木は一本もないのに、こんなに綺麗な花がたくさん咲いているなんて、ここは天国だブーン！",
+            "お花畑を飛び回るのが本当に楽しいブーン！君に大感謝だブーン！",
+            "ハチミツがたくさん取れそうな予感がするブーン！君のお花の開拓センスは大絶賛だブーン！"
+        ],
+        negotiation: "実は、このお花だらけの星がすごく気に入っちゃったブーン！ずっとここに定住して、美味しいハチミツを集めてあげたいブーン！いいブーン？"
+    },
+    {
+        id: "koala",
+        name: "コアラノシン",
+        suitColor: 0xa8a8a8, 
+        skinColor: 0xb0b0b0,
+        scale: 1.05,
+        voicePitch: 0.6,
+        earType: "koala",
+        dialogues: [
+            "ふあぁ……木がたくさん生い茂っていて、木登りに最高の星だコアラ……のんびりできるコアラ……",
+            "お花は全然ないけれど、この豊かな森 of 匂い、すっごく落ち着くコアラ……センス抜群コアラ。",
+            "美味しい葉っぱがたくさん茂るこの木、大絶賛コアラ！のぼり心地も最高コアラ〜",
+            "木陰でお昼寝するのが一番の幸せコアラ。こんな静かな森を作ってくれてありがとうコアラ。"
+        ],
+        negotiation: "ふむ……この静かな森がとても気に入ったコアラ. ここに定住して、のんびり暮らしてもいいコアラ？"
+    },
+    {
+        id: "fox",
+        name: "コン太",
+        suitColor: 0xff7a00, 
+        skinColor: 0xffa040,
+        scale: 1.0,
+        voicePitch: 1.1,
+        earType: "fox",
+        dialogues: [
+            "コンコン！この星はどこか不思議な魅力に満ちているコン！センス最高だコン！",
+            "こんなにキラキラした星で遊べるなんて、狐冥利に尽きるコン！大絶賛だコン！",
+            "君の作ったこの景色、ずっと眺めていても飽きないコン！本当にありがとうコン！",
+            "風が心地よく通り抜けていくコン！君が開拓したこの星は極上コン！"
+        ],
+        negotiation: "コンコン！実はこの美しい星が気に入っちゃったコン。ここに定住して、ずっと君とお喋りしたいコン！いいコン？"
+    },
+    {
+        id: "mouse",
+        name: "チュウ助",
+        suitColor: 0x9bafd9, 
+        skinColor: 0xccd5ff,
+        scale: 0.75,
+        voicePitch: 1.55,
+        earType: "mouse",
+        dialogues: [
+            "チュウ！こんなに広い星を自由に走り回れるなんてハッピーだチュウ！",
+            "あちこち探検するのがワクワクするチュウ！君のセンスは最高だチュウ！",
+            "こんなに綺麗な花や木を植えてくれて感謝だチュウ！大絶賛するチュウ！",
+            "小さくて可愛いものがたくさんあって、落ち着く星だチュウ！"
+        ],
+        negotiation: "チュウ！僕もこの小惑星の住人になりたいチュウ！隅っこに定住させてほしいチュウ！いいチュウ？"
+    },
+    {
+        id: "pig",
+        name: "ぶう太",
+        suitColor: 0xffc0cb, 
+        skinColor: 0xffccd5,
+        scale: 1.05,
+        voicePitch: 0.8,
+        earType: "pig",
+        dialogues: [
+            "ブヒッ！この星の土はとっても掘りやすくて心地よいブヒ！",
+            "美味しい食べ物がたくさん育ちそうな素晴らしい星だブヒ！大絶賛ブヒ！",
+            "君が植えてくれた植物のおかげで、空気がとっても美味しいブヒ！",
+            "のんびりゴロゴロするのに最高の場所だブヒ！君の開拓センスに感謝ブヒ！"
+        ],
+        negotiation: "ブヒッ！決めたブヒ！この住み心地の良い星に定住して、ずっと暮らしたいブヒ！お許しをブヒ？"
+    },
+    {
+        id: "frog",
+        name: "ケロ助",
+        suitColor: 0x5cd65c, 
+        skinColor: 0x77dd77,
+        scale: 0.85,
+        voicePitch: 1.2,
+        earType: "frog",
+        dialogues: [
+            "ケロケロ！水辺や高台があって、跳ねるのがとっても楽しいケロ！",
+            "この星の湿度がボクにとって快適すぎるケロ！君のセンスは大絶賛ケロ！",
+            "綺麗な植物たちに囲まれて、毎日がフェスティバルケロ！ありがとうケロ！",
+            "こんな夢のような小惑星を開拓するなんて、君はすごいテラフォーマーケロ！"
+        ],
+        negotiation: "ケロケロ！ボク、この星に定住して、ずっと大ジャンプしていたいケロ！ここに住んでもいいケロ？"
+    },
+    {
+        id: "alien",
+        name: "ゾルゲル",
+        suitColor: 0xbc13fe, 
+        skinColor: 0x39ff14,
+        scale: 0.9,
+        voicePitch: 0.95,
+        earType: "alien",
+        dialogues: [
+            "ピピッ……この星のエネルギーフィールドは非常に安定しているゾル。センス優秀ゾル。",
+            "地球の植物と宇宙のネオンの融合……大絶賛に値する芸術ゾル！",
+            "遠い銀河から来たが、ここが一番落ち着くポータブル星ゾル。感謝するゾル。",
+            "君が開拓したこの大地、極めて高度な文明的テラフォーミングゾル！"
+        ],
+        negotiation: "ピピッ！私のインテリジェンスがここに定住することを推奨しているゾル。正式な定住を許可してほしいゾル！"
+    },
+    {
+        id: "panda",
+        name: "パン助",
+        suitColor: 0x333333, 
+        skinColor: 0xffffff,
+        scale: 1.15,
+        voicePitch: 0.75,
+        earType: "panda",
+        dialogues: [
+            "パオーン？いや, パンダだから笹が食べたいパン！でもこの星の植物も綺麗で美味しいパン！",
+            "白と黒の対比が美しいこの星の景色, 大絶賛だパン！センス抜群パン！",
+            "木陰で笹（？）をかじりながら星空を見るのがお気に入りだパン。ありがとうパン！",
+            "のんびり転がっているだけでハッピーになれる星だパン。君のおかげだパン！"
+        ],
+        negotiation: "うむ、この星に定住するパン！毎日美味しい空気を吸って、君とゴロゴロしたいパン！いいパン？"
+    },
+    {
+        id: "monkey",
+        name: "サル吉",
+        suitColor: 0xb5651d, 
+        skinColor: 0xcd853f,
+        scale: 0.95,
+        voicePitch: 1.15,
+        earType: "monkey",
+        dialogues: [
+            "ウキッ！高いところがいっぱいで最高にアクティブになれる星だウキ！",
+            "君が植えてくれた木々は、どれも登りやすくて最高だウキ！大絶賛ウキ！",
+            "あっちの惑星からこっちの惑星まで飛び回るのも楽しいウキ！センス最高ウキ！",
+            "美味しい果物をたくさん実らせてくれてありがとうウキ！ウキウキするウキ！"
+        ],
+        negotiation: "ウキッ！このアクティブで美味しい星に定住したいウキ！毎日木登りして暮らしたいウキ！お許しをウキ！"
+    },
+    {
+        id: "sheep",
+        name: "メエ子",
+        suitColor: 0xf5f5f5, 
+        skinColor: 0xffe4e1,
+        scale: 1.0,
+        voicePitch: 1.3,
+        earType: "sheep",
+        dialogues: [
+            "メェ〜！ふわふわ of 草が生い茂っていて、食べてしまいたいほど素敵メェ！",
+            "空に浮かぶ星々がとっても優しく輝いているメェ。センスの塊メェ！",
+            "こんな綺麗な星でお散歩できるなんて、夢のようだメェ。大絶賛メェ！",
+            "優しくて暖かみのあるこの大地、作ってくれてありがとうメェ〜"
+        ],
+        negotiation: "メェ〜！実はこの居心地の良い星に定住したいメェ。ずっとここで草をはんでいたいメェ。いいメェ？"
+    },
+    {
+        id: "squirrel",
+        name: "リスミ",
+        suitColor: 0xe67e22, 
+        skinColor: 0xd35400,
+        scale: 0.8,
+        voicePitch: 1.45,
+        earType: "squirrel",
+        dialogues: [
+            "キキッ！木の実がたくさん収穫できそうな大好物の星だリス！センス抜群だリス！",
+            "このしっぽを振り回して走りたくなる軽快な星だリス！大絶賛だリス！",
+            "たくさん木を植えてくれてありがとうリス！木漏れ日が最高だリス！",
+            "宇宙の中で一番お気に入りの秘密基地になりそうだリス！感謝だリス！"
+        ],
+        negotiation: "キキッ！決めたリス！この星に定住して、木の実の貯蔵庫を作りたいリス！ここに住んでもいいリス？"
+    }
+];�やし効果は極上クオリティだクマ！大したものクマ！",
             "小惑星がこんなに美しく生まれ変わるなんて感動したクマ！君のセンスは一流クマ！",
             "この柔らかい草の上でお昼寝するのが最近の夢クマ。本当にいい環境をありがとうクマ！",
             "これほど綺麗な景色に囲まれるのは久しぶりクマ！君の努力を私は大絶賛するクマ！"
@@ -2732,6 +2833,9 @@ function createVillagerMesh(typeData) {
     const visualGroup = new THREE.Group();
     group.add(visualGroup);
 
+    const skinColor = typeData.skinColor || 0xffffff;
+    const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.4 });
+
     // 1. 体 (宇宙服)
     const bodyGeom = new THREE.SphereGeometry(0.38, 12, 12);
     bodyGeom.scale(1.0, 1.2, 1.0);
@@ -2801,7 +2905,7 @@ function createVillagerMesh(typeData) {
 
     // 5. 頭部
     const headGeom = new THREE.SphereGeometry(0.32, 16, 16);
-    const headMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+    const headMat = skinMat;
     const head = new THREE.Mesh(headGeom, headMat);
     head.position.set(0, 0.8, 0);
     head.castShadow = true;
@@ -2811,7 +2915,7 @@ function createVillagerMesh(typeData) {
     if (typeData.earType === "cat") {
         const earGeom = new THREE.ConeGeometry(0.08, 0.18, 4);
         earGeom.rotateX(0.15);
-        const earMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const earMat = skinMat;
         
         const leftEar = new THREE.Mesh(earGeom, earMat);
         leftEar.position.set(-0.18, 1.05, 0);
@@ -2839,7 +2943,7 @@ function createVillagerMesh(typeData) {
     } else if (typeData.earType === "rabbit") {
         const earGeom = new THREE.SphereGeometry(0.07, 8, 8);
         earGeom.scale(1.0, 3.2, 0.7); 
-        const earMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const earMat = skinMat;
         
         const leftEar = new THREE.Mesh(earGeom, earMat);
         leftEar.position.set(-0.13, 1.15, 0);
@@ -2868,7 +2972,7 @@ function createVillagerMesh(typeData) {
     } else if (typeData.earType === "dog") {
         const earGeom = new THREE.SphereGeometry(0.08, 8, 8);
         earGeom.scale(1.0, 2.0, 1.1); 
-        const earMat = new THREE.MeshStandardMaterial({ color: 0xe0dbcd }); 
+        const earMat = skinMat; 
         
         const leftEar = new THREE.Mesh(earGeom, earMat);
         leftEar.position.set(-0.28, 0.85, 0);
@@ -2883,7 +2987,7 @@ function createVillagerMesh(typeData) {
     } else if (typeData.earType === "bear") {
         const earGeom = new THREE.SphereGeometry(0.1, 8, 8);
         earGeom.scale(1.1, 1.1, 0.7);
-        const earMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const earMat = skinMat;
 
         const leftEar = new THREE.Mesh(earGeom, earMat);
         leftEar.position.set(-0.2, 1.02, 0);
@@ -2970,7 +3074,7 @@ function createVillagerMesh(typeData) {
     } else if (typeData.earType === "koala") {
         const earGeom = new THREE.SphereGeometry(0.14, 8, 8);
         earGeom.scale(1.2, 1.2, 0.5);
-        const earMat = new THREE.MeshStandardMaterial({ color: 0xa8a8a8 });
+        const earMat = skinMat;
         
         const leftEar = new THREE.Mesh(earGeom, earMat);
         leftEar.position.set(-0.3, 0.85, 0);
@@ -3005,7 +3109,7 @@ function createVillagerMesh(typeData) {
     } else if (typeData.earType === "fox") {
         const earGeom = new THREE.ConeGeometry(0.1, 0.22, 4);
         earGeom.rotateX(0.15);
-        const earMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const earMat = skinMat;
         
         const leftEar = new THREE.Mesh(earGeom, earMat);
         leftEar.position.set(-0.19, 1.06, 0);
@@ -3033,7 +3137,7 @@ function createVillagerMesh(typeData) {
     } else if (typeData.earType === "mouse") {
         const earGeom = new THREE.SphereGeometry(0.13, 8, 8);
         earGeom.scale(1.0, 1.0, 0.15);
-        const earMat = new THREE.MeshStandardMaterial({ color: 0xa8a8a8 });
+        const earMat = skinMat;
         
         const leftEar = new THREE.Mesh(earGeom, earMat);
         leftEar.position.set(-0.25, 0.98, 0);
@@ -3062,7 +3166,7 @@ function createVillagerMesh(typeData) {
     } else if (typeData.earType === "pig") {
         const earGeom = new THREE.SphereGeometry(0.08, 8, 8);
         earGeom.scale(0.8, 1.4, 0.6);
-        const earMat = new THREE.MeshStandardMaterial({ color: 0xffb6c1 });
+        const earMat = skinMat;
         
         const leftEar = new THREE.Mesh(earGeom, earMat);
         leftEar.position.set(-0.24, 0.88, 0);
@@ -3162,7 +3266,7 @@ function createVillagerMesh(typeData) {
     } else if (typeData.earType === "monkey") {
         const earGeom = new THREE.SphereGeometry(0.09, 8, 8);
         earGeom.scale(1.0, 1.0, 0.5);
-        const earMat = new THREE.MeshStandardMaterial({ color: 0xd2b48c });
+        const earMat = skinMat;
         
         const leftEar = new THREE.Mesh(earGeom, earMat);
         leftEar.position.set(-0.28, 0.82, 0);
@@ -3190,7 +3294,7 @@ function createVillagerMesh(typeData) {
 
     } else if (typeData.earType === "squirrel") {
         const earGeom = new THREE.ConeGeometry(0.08, 0.2, 4);
-        const earMat = new THREE.MeshStandardMaterial({ color: 0xe67e22 });
+        const earMat = skinMat;
         
         const leftEar = new THREE.Mesh(earGeom, earMat);
         leftEar.position.set(-0.16, 1.05, 0);
@@ -3300,7 +3404,7 @@ function createVillagerMesh(typeData) {
 
     // 9. 手と脚・靴
     const limbGeom = new THREE.SphereGeometry(0.09, 8, 8);
-    const limbMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+    const limbMat = skinMat;
     
     const leftHand = new THREE.Mesh(limbGeom, limbMat);
     leftHand.position.set(-0.4, 0.45, 0.1);
@@ -3314,7 +3418,7 @@ function createVillagerMesh(typeData) {
 
     // 脚
     const legGeom = new THREE.CylinderGeometry(0.08, 0.08, 0.15, 8);
-    const legMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+    const legMat = skinMat;
     
     const leftLeg = new THREE.Mesh(legGeom, legMat);
     leftLeg.position.set(-0.16, 0.08, 0);
@@ -3339,7 +3443,7 @@ function createVillagerMesh(typeData) {
     rightBoot.position.set(0.16, 0.01, 0.04);
     visualGroup.add(rightBoot);
 
-    // 10. 📡 頭上ガイドビーコン
+    // 📡 頭上ガイドビーコン
     const beaconGeom = new THREE.CylinderGeometry(0.05, 0.6, 25, 8, 1, true);
     beaconGeom.translate(0, 12.5, 0); 
     const beaconMat = new THREE.MeshBasicMaterial({
@@ -3355,7 +3459,168 @@ function createVillagerMesh(typeData) {
     beacon.visible = isGuideActive;
     group.add(beacon);
 
+    // 11. 固有アクセサリー (バッジ・アタッチメント) の追加
+    if (typeData.id === "cat") {
+        const collarRingGeom = new THREE.TorusGeometry(0.27, 0.02, 6, 16);
+        const goldMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2 });
+        const collarRing = new THREE.Mesh(collarRingGeom, goldMat);
+        collarRing.position.set(0, 0.68, 0.02);
+        collarRing.rotation.x = Math.PI / 2;
+        visualGroup.add(collarRing);
+
+        const bellGeom = new THREE.SphereGeometry(0.06, 8, 8);
+        const bell = new THREE.Mesh(bellGeom, goldMat);
+        bell.position.set(0, 0.61, 0.23);
+        visualGroup.add(bell);
+    } else if (typeData.id === "rabbit") {
+        const carrotGeom = new THREE.ConeGeometry(0.04, 0.12, 6);
+        carrotGeom.rotateX(-Math.PI / 2);
+        const carrotMat = new THREE.MeshStandardMaterial({ color: 0xff7f00, roughness: 0.5 });
+        const carrot = new THREE.Mesh(carrotGeom, carrotMat);
+        carrot.position.set(0.12, 0.55, 0.25);
+        visualGroup.add(carrot);
+        
+        const leafGeom = new THREE.BoxGeometry(0.015, 0.04, 0.015);
+        const leafMat = new THREE.MeshStandardMaterial({ color: 0x228b22 });
+        const leaf = new THREE.Mesh(leafGeom, leafMat);
+        leaf.position.set(0.12, 0.55, 0.32);
+        leaf.rotation.x = 0.3;
+        visualGroup.add(leaf);
+    } else if (typeData.id === "dog") {
+        const boneMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+        const boneCenterGeom = new THREE.CylinderGeometry(0.012, 0.012, 0.1, 6);
+        boneCenterGeom.rotateZ(Math.PI / 4);
+        const boneCenter = new THREE.Mesh(boneCenterGeom, boneMat);
+        boneCenter.position.set(0.12, 0.55, 0.25);
+        visualGroup.add(boneCenter);
+        
+        const jointGeom = new THREE.SphereGeometry(0.016, 6, 6);
+        const j1 = new THREE.Mesh(jointGeom, boneMat); j1.position.set(0.08, 0.51, 0.25); visualGroup.add(j1);
+        const j2 = new THREE.Mesh(jointGeom, boneMat); j2.position.set(0.09, 0.52, 0.25); visualGroup.add(j2);
+        const j3 = new THREE.Mesh(jointGeom, boneMat); j3.position.set(0.15, 0.58, 0.25); visualGroup.add(j3);
+        const j4 = new THREE.Mesh(jointGeom, boneMat); j4.position.set(0.16, 0.59, 0.25); visualGroup.add(j4);
+    } else if (typeData.id === "bear") {
+        const nutGeom = new THREE.SphereGeometry(0.045, 8, 8);
+        nutGeom.scale(1.0, 1.3, 1.0);
+        const nutMat = new THREE.MeshStandardMaterial({ color: 0xcd853f, roughness: 0.6 });
+        const nut = new THREE.Mesh(nutGeom, nutMat);
+        nut.position.set(0.12, 0.55, 0.25);
+        visualGroup.add(nut);
+        
+        const capGeom = new THREE.SphereGeometry(0.048, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+        const capMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.8 });
+        const cap = new THREE.Mesh(capGeom, capMat);
+        cap.position.set(0.12, 0.58, 0.25);
+        visualGroup.add(cap);
+    } else if (typeData.id === "koala") {
+        const leafGeom = new THREE.SphereGeometry(0.045, 8, 8);
+        leafGeom.scale(1.0, 0.2, 1.6);
+        const leafMat = new THREE.MeshStandardMaterial({ color: 0x3cb371, roughness: 0.6 });
+        const leaf = new THREE.Mesh(leafGeom, leafMat);
+        leaf.position.set(0.12, 0.55, 0.25);
+        leaf.rotation.set(0.3, 0.4, 0.5);
+        visualGroup.add(leaf);
+    } else if (typeData.id === "fox") {
+        const scarfGeom = new THREE.TorusGeometry(0.27, 0.035, 6, 16);
+        const scarfMat = new THREE.MeshStandardMaterial({ color: 0xe63946, roughness: 0.7 });
+        const scarf = new THREE.Mesh(scarfGeom, scarfMat);
+        scarf.position.set(0, 0.67, 0.02);
+        scarf.rotation.x = Math.PI / 2.1;
+        visualGroup.add(scarf);
+        
+        const tailScarfGeom = new THREE.CylinderGeometry(0.03, 0.01, 0.18, 6);
+        const tailScarf = new THREE.Mesh(tailScarfGeom, scarfMat);
+        tailScarf.position.set(0.12, 0.55, 0.23);
+        tailScarf.rotation.z = -0.4;
+        visualGroup.add(tailScarf);
+    } else if (typeData.id === "mouse") {
+        const cheeseGeom = new THREE.ConeGeometry(0.05, 0.04, 3);
+        cheeseGeom.rotateX(Math.PI / 2);
+        const cheeseMat = new THREE.MeshStandardMaterial({ color: 0xffd166, roughness: 0.4 });
+        const cheese = new THREE.Mesh(cheeseGeom, cheeseMat);
+        cheese.position.set(0.12, 0.55, 0.25);
+        cheese.rotation.y = 0.5;
+        visualGroup.add(cheese);
+    } else if (typeData.id === "pig") {
+        const greenMat = new THREE.MeshStandardMaterial({ color: 0x2ec4b6, roughness: 0.5 });
+        const leafGeom = new THREE.SphereGeometry(0.025, 6, 6);
+        leafGeom.scale(1.0, 0.3, 1.0);
+        for(let i=0; i<3; i++) {
+            const leaf = new THREE.Mesh(leafGeom, greenMat);
+            const angle = (i / 3) * Math.PI * 2;
+            leaf.position.set(0.12 + Math.cos(angle)*0.025, 0.55 + Math.sin(angle)*0.025, 0.25);
+            visualGroup.add(leaf);
+        }
+    } else if (typeData.id === "frog") {
+        const padGeom = new THREE.CylinderGeometry(0.045, 0.045, 0.008, 12);
+        const padMat = new THREE.MeshStandardMaterial({ color: 0x1d3557, roughness: 0.6 });
+        const pad = new THREE.Mesh(padGeom, padMat);
+        pad.position.set(0.12, 0.55, 0.25);
+        pad.rotation.x = Math.PI / 2.2;
+        visualGroup.add(pad);
+    } else if (typeData.id === "alien") {
+        const holoGeom = new THREE.TorusGeometry(0.5, 0.015, 4, 16);
+        const holoMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.7 });
+        const holo = new THREE.Mesh(holoGeom, holoMat);
+        holo.position.set(0, 0.82, 0);
+        holo.rotation.x = Math.PI / 2;
+        visualGroup.add(holo);
+    } else if (typeData.id === "panda") {
+        const stemGeom = new THREE.CylinderGeometry(0.006, 0.006, 0.12, 4);
+        const greenMat = new THREE.MeshStandardMaterial({ color: 0x2a9d8f, roughness: 0.6 });
+        const stem = new THREE.Mesh(stemGeom, greenMat);
+        stem.position.set(0.12, 0.55, 0.25);
+        stem.rotation.z = -0.4;
+        visualGroup.add(stem);
+        
+        const leafGeom = new THREE.SphereGeometry(0.015, 6, 6);
+        leafGeom.scale(2.2, 0.3, 1.0);
+        const leaf = new THREE.Mesh(leafGeom, greenMat);
+        leaf.position.set(0.14, 0.58, 0.26);
+        leaf.rotation.z = 0.5;
+        visualGroup.add(leaf);
+    } else if (typeData.id === "monkey") {
+        const bananaGeom = new THREE.TorusGeometry(0.045, 0.012, 4, 8, Math.PI);
+        const bananaMat = new THREE.MeshStandardMaterial({ color: 0xffe066, roughness: 0.5 });
+        const banana = new THREE.Mesh(bananaGeom, bananaMat);
+        banana.position.set(0.12, 0.55, 0.25);
+        banana.rotation.z = 0.5;
+        visualGroup.add(banana);
+    } else if (typeData.id === "sheep") {
+        const woolGeom = new THREE.SphereGeometry(0.07, 6, 6);
+        const woolMat = new THREE.MeshStandardMaterial({ color: 0xfaf9f6, roughness: 0.95 });
+        const woolPositions = [
+            [-0.24, 0.5, 0.2], [0.24, 0.5, 0.2],
+            [-0.24, 0.3, 0.2], [0.24, 0.3, 0.2],
+            [-0.2, 0.55, -0.2], [0.2, 0.55, -0.2],
+            [0, 0.22, 0.28], [0, 0.6, -0.28]
+        ];
+        woolPositions.forEach(pos => {
+            const wool = new THREE.Mesh(woolGeom, woolMat);
+            wool.position.set(pos[0], pos[1], pos[2]);
+            visualGroup.add(wool);
+        });
+    } else if (typeData.id === "squirrel") {
+        const nutGeom = new THREE.SphereGeometry(0.04, 8, 8);
+        nutGeom.scale(1.0, 1.3, 1.0);
+        const nutMat = new THREE.MeshStandardMaterial({ color: 0xcd853f, roughness: 0.6 });
+        const nut = new THREE.Mesh(nutGeom, nutMat);
+        nut.position.set(0.12, 0.55, 0.25);
+        visualGroup.add(nut);
+        
+        const capGeom = new THREE.SphereGeometry(0.043, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+        const capMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.8 });
+        const cap = new THREE.Mesh(capGeom, capMat);
+        cap.position.set(0.12, 0.58, 0.25);
+        visualGroup.add(cap);
+    }
+
+    // スケールの適用
+    const scaleVal = typeData.scale || 1.0;
+    visualGroup.scale.set(scaleVal, scaleVal, scaleVal);
+
     return { group, visualGroup, beacon };
+};
 }
 
 // 住人の新規作成・小惑星への出現処理
@@ -3421,6 +3686,15 @@ function spawnVillager(typeData, milestone, isRevisitor = false) {
             if (v.rocketInstance) {
                 const rPos = v.rocketInstance.baseLocalPos;
                 if (candPos.distanceTo(rPos) < minDistance) {
+                    tooClose = true;
+                    break;
+                }
+            }
+        }
+        
+        if (!tooClose && currentPlanet.plants) {
+            for (const p of currentPlanet.plants) {
+                if (p.localPos && candPos.distanceTo(p.localPos) < 4.0) {
                     tooClose = true;
                     break;
                 }
@@ -5835,15 +6109,42 @@ function updateVillagers(delta) {
                         v.rocketStyle = Math.floor(Math.random() * 5);
                     }
                     const rocketMesh = buildRocket(v.rocketStyle);
-                    const angleOffset = Math.random() * Math.PI * 2;
-                    const distOffset = 5.0; // 巨大化したため、距離を増やす (元は 2.4)
-                    const tangent = new THREE.Vector3(1, 0, 0).applyQuaternion(v.group.quaternion);
-                    const bitangent = new THREE.Vector3(0, 0, 1).applyQuaternion(v.group.quaternion);
-                    
-                    const rPosLocal = v.localPos.clone()
-                        .addScaledVector(tangent, Math.cos(angleOffset) * distOffset)
-                        .addScaledVector(bitangent, Math.sin(angleOffset) * distOffset)
-                        .normalize().multiplyScalar(ASTEROID_RADIUS);
+                    let rPosLocal = null;
+                    for (let attempt = 0; attempt < 100; attempt++) {
+                        const angleOffset = Math.random() * Math.PI * 2;
+                        const distOffset = 5.0; // 巨大化したため、距離を増やす (元は 2.4)
+                        const tangent = new THREE.Vector3(1, 0, 0).applyQuaternion(v.group.quaternion);
+                        const bitangent = new THREE.Vector3(0, 0, 1).applyQuaternion(v.group.quaternion);
+                        
+                        const candPos = v.localPos.clone()
+                            .addScaledVector(tangent, Math.cos(angleOffset) * distOffset)
+                            .addScaledVector(bitangent, Math.sin(angleOffset) * distOffset)
+                            .normalize().multiplyScalar(ASTEROID_RADIUS);
+                        
+                        let tooClose = false;
+                        if (currentPlanet.plants) {
+                            for (const p of currentPlanet.plants) {
+                                if (p.localPos && candPos.distanceTo(p.localPos) < 4.0) {
+                                    tooClose = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!tooClose) {
+                            rPosLocal = candPos;
+                            break;
+                        }
+                    }
+                    if (!rPosLocal) {
+                        const angleOffset = Math.random() * Math.PI * 2;
+                        const distOffset = 5.0;
+                        const tangent = new THREE.Vector3(1, 0, 0).applyQuaternion(v.group.quaternion);
+                        const bitangent = new THREE.Vector3(0, 0, 1).applyQuaternion(v.group.quaternion);
+                        rPosLocal = v.localPos.clone()
+                            .addScaledVector(tangent, Math.cos(angleOffset) * distOffset)
+                            .addScaledVector(bitangent, Math.sin(angleOffset) * distOffset)
+                            .normalize().multiplyScalar(ASTEROID_RADIUS);
+                    }
                     
                     rocketMesh.position.copy(rPosLocal);
                     const rNormal = rPosLocal.clone().normalize();
