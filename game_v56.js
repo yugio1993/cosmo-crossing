@@ -3796,6 +3796,22 @@ let cosmicWhaleTimer = 10.0; // クジラ出現インターバル
 let cosmicWhaleSpeed = 6.0;
 let cosmicWhaleDirection = new THREE.Vector3();
 let supernovas = [];         // 超新星爆発リング
+let skyConstellations = [];  // 星座オブジェクトのリスト
+let constellationTimer = 8.0; // 星座出現タイマー
+let isMeteorShower = false;   // 流星群が発生しているか
+let meteorShowerTimer = 0.0;  // 流星群の残り時間
+let meteorShowerTriggerTimer = 35.0; // 次の流星群トリガーまでの時間
+let skySatellites = [];       // 人工衛星リスト
+let satelliteTimer = 6.0;     // 衛星タイマー
+let skyJellyfish = [];       // スペースクラゲリスト
+let jellyfishTimer = 10.0;    // クラゲタイマー
+let blackHoles = [];          // ブラックホールリスト
+let blackHoleTimer = 20.0;    // ブラックホールタイマー
+let skyRockets = [];          // ロケットリスト
+let rocketTimer = 15.0;       // ロケットタイマー
+let rocketParticles = [];     // ロケット火花パーティクル
+let lookUpReactionCooldown = 0; // 主人公の見上げる反応クールダウン（秒）
+let lookupBubbleHideTimeout = null; // フキダシ自動非表示タイマー
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
 let hoveredSkyPlanet = null;
@@ -7159,7 +7175,6 @@ function updateEnvParticles(delta) {
 }
 
 // 旅立ちロケットエンジンのネオン噴射パーティクル
-const rocketParticles = [];
 
 function spawnRocketExhaust(pos, normal) {
     const particleCount = 4;
@@ -8860,6 +8875,9 @@ function animate() {
     // v35: 見上げる用の宇宙演出とインタラクションの更新
     updateLookUpAssets(delta);
     updateLookUpInteraction();
+    updateLookUpSpeechBubble();
+    // 見上げる反応クールダウンの更新
+    if (lookUpReactionCooldown > 0) lookUpReactionCooldown -= delta;
 
     checkVillagerProximity();
 
@@ -9535,6 +9553,116 @@ function cancelNotifCameraFocus() {
 // v35 見上げるモード用関数群の実装
 // ==========================================
 
+// 見上げる画面のイベントに主人公がランダムで反応するセリフを表示する
+const LOOKUP_REACTIONS = {
+    comet: [
+        "わあ、流れ星だ！✨ お願いごとしなきゃ！",
+        "流星が飛んでったよ！すごいスピード！",
+        "あ、彗星！きれい……🌠"
+    ],
+    ufo: [
+        "えっ……UFO？！本物？！🛸",
+        "なにあれ！円盤型の飛行物体！",
+        "あの光……まさか宇宙人？！"
+    ],
+    whale: [
+        "宇宙クジラだ……！神秘的すぎる……🐋",
+        "でかい……！宇宙ってほんとに広いんだなあ。",
+        "クジラが泳いでる！宇宙を！"
+    ],
+    supernova: [
+        "あっ、星が爆発した！超新星だ！💥",
+        "すごい光……星の死が見えた。",
+        "スーパーノバ……！圧倒的だ……！"
+    ],
+    meteor: [
+        "流星群！あっちにもこっちにも！🌠🌠",
+        "こんなに流れ星が……最高の夜空だ！",
+        "雨みたいに星が降ってくる……！"
+    ],
+    satellite: [
+        "人工衛星かな？ゆっくり動いてる。🛰️",
+        "あ、衛星だ！だれかが打ち上げたのかな？",
+        "宇宙にも人工物があるんだね……"
+    ],
+    jellyfish: [
+        "スペースクラゲ？！ふわふわしてる……🪼",
+        "なにあれ……クラゲみたいな生き物！",
+        "宇宙のクラゲ……透き通ってきれいだ！"
+    ],
+    blackhole: [
+        "ブラックホール……！近づかないようにしなきゃ。🌑",
+        "あの黒い渦……時空が歪んでる！",
+        "ブラックホールだ！光も吸い込まれてる！"
+    ],
+    rocket: [
+        "ロケットだ！だれかが旅立ってくの？🚀",
+        "飛び立った！すごい！宇宙に向かって！",
+        "ロケット……ぼくも乗ってみたいな！"
+    ],
+    constellation: [
+        "星座が見えた！あの星たち、つながってる！⭐",
+        "星座……古い時代から人が眺めてた星たちだ。",
+        "わあ、星座が浮かび上がってきた！"
+    ]
+};
+
+// 見上げる時のプレイヤーフキダシ用要素
+const lookupSpeechBubbleEl = document.getElementById('lookup-speech-bubble');
+
+function showLookUpPlayerReaction(eventType) {
+    if (lookUpReactionCooldown > 0) return;
+    const lines = LOOKUP_REACTIONS[eventType];
+    if (!lines || lines.length === 0) return;
+    const text = lines[Math.floor(Math.random() * lines.length)];
+    // プレイヤー頭上のフキダシに表示
+    if (lookupSpeechBubbleEl) {
+        lookupSpeechBubbleEl.textContent = text;
+        lookupSpeechBubbleEl.style.display = 'block';
+        // アニメーションをリセットしてリプレイ
+        lookupSpeechBubbleEl.style.animation = 'none';
+        void lookupSpeechBubbleEl.offsetWidth;
+        lookupSpeechBubbleEl.style.animation = '';
+        if (lookupBubbleHideTimeout) clearTimeout(lookupBubbleHideTimeout);
+        lookupBubbleHideTimeout = setTimeout(() => {
+            if (lookupSpeechBubbleEl) lookupSpeechBubbleEl.style.display = 'none';
+            lookupBubbleHideTimeout = null;
+        }, 4500);
+    }
+    lookUpReactionCooldown = 8.0 + Math.random() * 4.0;
+}
+
+// プレイヤー頭上にフキダシ位置を毎フレーム更新
+function updateLookUpSpeechBubble() {
+    if (!lookupSpeechBubbleEl || lookupSpeechBubbleEl.style.display === 'none') return;
+    if (!isLookUpMode || !playerGroup) {
+        lookupSpeechBubbleEl.style.display = 'none';
+        return;
+    }
+    // プレイヤー頭部の少し上のワールド座標を取得
+    const headPos = new THREE.Vector3();
+    playerGroup.getWorldPosition(headPos);
+    headPos.y += 2.2; // 頭の高さ分オフセット
+    headPos.project(camera);
+    const x = (headPos.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (headPos.y * -0.5 + 0.5) * window.innerHeight;
+    lookupSpeechBubbleEl.style.left = `${x}px`;
+    lookupSpeechBubbleEl.style.top = `${y - 20}px`; // さらに少し上へ
+}
+
+// アクティブなイベント総数を返す（重複制限用）
+function getLookUpActiveEventCount() {
+    let count = 0;
+    if (ufoActive) count++;
+    if (cosmicWhaleActive) count++;
+    count += supernovas.length;
+    count += skySatellites.length;
+    count += skyJellyfish.length;
+    count += blackHoles.length;
+    count += skyRockets.length;
+    return count;
+}
+
 function toggleLookUpMode() {
     isLookUpMode = !isLookUpMode;
     
@@ -9630,6 +9758,20 @@ function createLookUpAssets() {
     cosmicWhale = null;
     cosmicWhaleActive = false;
     supernovas = [];
+    skyConstellations = [];
+    constellationTimer = 5.0; // 移行後すぐに星座が出るように短めに設定
+    isMeteorShower = false;
+    meteorShowerTimer = 0.0;
+    meteorShowerTriggerTimer = 25.0;
+    skySatellites = [];
+    satelliteTimer = 4.0;
+    skyJellyfish = [];
+    jellyfishTimer = 7.0;
+    blackHoles = [];
+    blackHoleTimer = 15.0;
+    skyRockets = [];
+    rocketTimer = 10.0;
+    rocketParticles = [];
     
     // 惑星ごとの設定
     let galaxyColor1, galaxyColor2, nebulaColor;
@@ -9855,7 +9997,7 @@ function updateLookUpAssets(delta) {
 
     ufoTimer -= delta;
     if (ufoTimer <= 0 && !ufoActive) {
-        if (Math.random() < 0.25) {
+        if (Math.random() < 0.25 && getLookUpActiveEventCount() < 3) {
             spawnLookUpUFO();
         } else {
             ufoTimer = 4.0 + Math.random() * 6.0;
@@ -9921,7 +10063,7 @@ function updateLookUpAssets(delta) {
 
     cosmicWhaleTimer -= delta;
     if (cosmicWhaleTimer <= 0 && !cosmicWhaleActive) {
-        if (Math.random() < 0.2) {
+        if (Math.random() < 0.2 && getLookUpActiveEventCount() < 3) {
             spawnLookUpCosmicWhale();
         } else {
             cosmicWhaleTimer = 8.0 + Math.random() * 8.0;
@@ -9953,7 +10095,7 @@ function updateLookUpAssets(delta) {
         }
     }
 
-    if (Math.random() < 0.001) {
+    if (Math.random() < 0.001 && getLookUpActiveEventCount() < 3) {
         spawnLookUpSupernova();
     }
     for (let i = supernovas.length - 1; i >= 0; i--) {
@@ -9975,6 +10117,209 @@ function updateLookUpAssets(delta) {
         s.ringMesh.material.opacity = 0.9 * (1.0 - progress);
         s.starMesh.material.opacity = Math.max(0, 1.0 - progress * 4.0);
         s.starMesh.scale.setScalar(1.0 - progress);
+    }
+
+    // 星座（コンステレーション）の更新
+    constellationTimer -= delta;
+    if (constellationTimer <= 0) {
+        spawnLookUpConstellation();
+        constellationTimer = 18.0 + Math.random() * 12.0;
+    }
+    for (let i = skyConstellations.length - 1; i >= 0; i--) {
+        const c = skyConstellations[i];
+        c.age += delta;
+        if (c.age >= c.maxAge) {
+            lookUpGroup.remove(c.group);
+            const idx = skyPlanets.indexOf(c.hitMesh);
+            if (idx !== -1) skyPlanets.splice(idx, 1);
+            c.group.traverse(obj => {
+                if (obj.isMesh || obj.isLine) {
+                    obj.geometry.dispose();
+                    obj.material.dispose();
+                }
+            });
+            skyConstellations.splice(i, 1);
+            continue;
+        }
+        let opacity = 0;
+        if (c.age < 2.0) {
+            opacity = (c.age / 2.0) * 0.75;
+        } else if (c.age > c.maxAge - 2.0) {
+            opacity = ((c.maxAge - c.age) / 2.0) * 0.75;
+        } else {
+            opacity = 0.75;
+        }
+        c.materials.forEach(mat => {
+            mat.opacity = opacity;
+        });
+    }
+
+    // 流星群の更新
+    if (isMeteorShower) {
+        meteorShowerTimer -= delta;
+        if (meteorShowerTimer <= 0) {
+            isMeteorShower = false;
+        }
+        if (Math.random() < 0.12) {
+            spawnLookUpComet();
+        }
+    } else {
+        meteorShowerTriggerTimer -= delta;
+        if (meteorShowerTriggerTimer <= 0) {
+            startMeteorShower();
+            meteorShowerTriggerTimer = 35.0 + Math.random() * 25.0;
+        }
+    }
+
+    // 人工衛星の更新
+    satelliteTimer -= delta;
+    if (satelliteTimer <= 0) {
+        if (getLookUpActiveEventCount() < 3) spawnLookUpSatellite();
+        satelliteTimer = 12.0 + Math.random() * 10.0;
+    }
+    for (let i = skySatellites.length - 1; i >= 0; i--) {
+        const s = skySatellites[i];
+        s.group.position.addScaledVector(s.dir, s.speed * delta);
+        if (s.group.position.x > 80 || s.group.position.x < -80) {
+            lookUpGroup.remove(s.group);
+            const idx = skyPlanets.indexOf(s.hitMesh);
+            if (idx !== -1) skyPlanets.splice(idx, 1);
+            s.group.traverse(obj => {
+                if (obj.isMesh) {
+                    obj.geometry.dispose();
+                    obj.material.dispose();
+                }
+            });
+            skySatellites.splice(i, 1);
+        }
+    }
+
+    // スペースクラゲの更新
+    jellyfishTimer -= delta;
+    if (jellyfishTimer <= 0) {
+        if (getLookUpActiveEventCount() < 3) spawnLookUpSpaceJellyfish();
+        jellyfishTimer = 15.0 + Math.random() * 10.0;
+    }
+    for (let i = skyJellyfish.length - 1; i >= 0; i--) {
+        const j = skyJellyfish[i];
+        j.age += delta;
+        j.group.position.addScaledVector(j.dir, j.speed * delta);
+        j.group.position.y += Math.sin(j.age * 2.5) * 0.02;
+
+        j.tentacles.forEach((t, idx) => {
+            t.rotation.z = Math.sin(j.age * 3.0 + idx) * 0.15;
+            t.scale.y = 1.0 + Math.sin(j.age * 3.0 + idx) * 0.1;
+        });
+
+        if (j.group.position.x < -80) {
+            lookUpGroup.remove(j.group);
+            j.group.traverse(obj => {
+                if (obj.isMesh) {
+                    obj.geometry.dispose();
+                    obj.material.dispose();
+                }
+            });
+            skyJellyfish.splice(i, 1);
+        }
+    }
+
+    // ブラックホールの更新
+    blackHoleTimer -= delta;
+    if (blackHoleTimer <= 0) {
+        if (getLookUpActiveEventCount() < 3) spawnLookUpBlackHole();
+        blackHoleTimer = 35.0 + Math.random() * 25.0;
+    }
+    for (let i = blackHoles.length - 1; i >= 0; i--) {
+        const b = blackHoles[i];
+        b.age += delta;
+        if (b.age >= b.maxAge) {
+            lookUpGroup.remove(b.group);
+            b.group.traverse(obj => {
+                if (obj.isMesh) {
+                    obj.geometry.dispose();
+                    obj.material.dispose();
+                }
+            });
+            blackHoles.splice(i, 1);
+            continue;
+        }
+
+        b.ring.rotation.z += delta * 1.5;
+        
+        let targetScale = 1.0;
+        if (b.age < 2.0) {
+            targetScale = b.age / 2.0;
+        } else if (b.age > b.maxAge - 2.0) {
+            targetScale = (b.maxAge - b.age) / 2.0;
+        }
+        b.group.scale.setScalar(targetScale);
+
+        if (Math.random() < 0.3) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 6.0 + Math.random() * 4.0;
+            const pPos = b.group.position.clone().add(new THREE.Vector3(Math.cos(angle) * dist, Math.sin(angle) * dist, (Math.random() - 0.5) * 2));
+            const pGeom = new THREE.SphereGeometry(0.1, 4, 4);
+            const pMat = new THREE.MeshBasicMaterial({
+                color: 0xffaa44,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending
+            });
+            const pMesh = new THREE.Mesh(pGeom, pMat);
+            pMesh.position.copy(pPos);
+            lookUpGroup.add(pMesh);
+            rocketParticles.push({
+                mesh: pMesh,
+                dir: b.group.position.clone().sub(pPos).normalize(),
+                speed: 4.0 + Math.random() * 3.0,
+                age: 0,
+                maxAge: 1.5
+            });
+        }
+    }
+
+    // ロケットの更新
+    rocketTimer -= delta;
+    if (rocketTimer <= 0) {
+        if (getLookUpActiveEventCount() < 3) spawnLookUpRocket();
+        rocketTimer = 22.0 + Math.random() * 15.0;
+    }
+    for (let i = skyRockets.length - 1; i >= 0; i--) {
+        const r = skyRockets[i];
+        const dir = new THREE.Vector3(0, 1, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), r.group.rotation.z);
+        r.group.position.addScaledVector(dir, r.speed * delta);
+
+        if (Math.random() < 0.6) {
+            const nozzlePos = r.group.position.clone().addScaledVector(dir, -1.5);
+            spawnRocketParticle(nozzlePos);
+        }
+
+        if (r.group.position.y > ASTEROID_RADIUS + 35) {
+            lookUpGroup.remove(r.group);
+            r.group.traverse(obj => {
+                if (obj.isMesh) {
+                    obj.geometry.dispose();
+                    obj.material.dispose();
+                }
+            });
+            skyRockets.splice(i, 1);
+        }
+    }
+
+    // ロケット火花等パーティクルの更新
+    for (let i = rocketParticles.length - 1; i >= 0; i--) {
+        const p = rocketParticles[i];
+        p.age += delta;
+        if (p.age >= p.maxAge) {
+            lookUpGroup.remove(p.mesh);
+            p.mesh.geometry.dispose();
+            p.mesh.material.dispose();
+            rocketParticles.splice(i, 1);
+            continue;
+        }
+        p.mesh.position.addScaledVector(p.dir, p.speed * delta);
+        p.mesh.material.opacity = 0.9 * (1.0 - (p.age / p.maxAge));
+        p.mesh.scale.setScalar(1.0 - (p.age / p.maxAge));
     }
 }
 
@@ -10033,6 +10378,7 @@ function updateLookUpInteraction() {
 }
 
 function spawnLookUpComet() {
+    if (Math.random() < 0.25) showLookUpPlayerReaction('comet');
     const geom = new THREE.BufferGeometry();
     const length = 12.0 + Math.random() * 8.0;
     const startX = -80 - Math.random() * 30;
@@ -10066,6 +10412,7 @@ function spawnLookUpComet() {
 }
 
 function spawnLookUpUFO() {
+    showLookUpPlayerReaction('ufo');
     ufoActive = true;
     ufoGroup = new THREE.Group();
     const bodyGeom = new THREE.CylinderGeometry(1.8, 2.2, 0.4, 8);
@@ -10158,6 +10505,7 @@ function spawnLookUpAurora() {
 }
 
 function spawnLookUpCosmicWhale() {
+    showLookUpPlayerReaction('whale');
     cosmicWhaleActive = true;
     cosmicWhale = new THREE.Group();
     const mat = new THREE.MeshPhysicalMaterial({
@@ -10214,6 +10562,7 @@ function spawnLookUpCosmicWhale() {
 }
 
 function spawnLookUpSupernova() {
+    showLookUpPlayerReaction('supernova');
     const posX = (Math.random() - 0.5) * 75;
     const posY = ASTEROID_RADIUS + 15 + Math.random() * 8;
     const posZ = -40 + (Math.random() - 0.5) * 10;
@@ -10251,6 +10600,351 @@ function spawnLookUpSupernova() {
     if (audioCtx && audioCtx.state === 'running') {
         playVillagerSpawnSound();
     }
+}
+
+// 新規イベント関数群
+
+function spawnLookUpConstellation() {
+    showLookUpPlayerReaction('constellation');
+    const dataList = [
+        {
+            name: "こぐま座",
+            lines: [
+                [[-10, 22, -32], [-8, 23, -32]],
+                [[-8, 23, -32], [-6, 23.5, -32]],
+                [[-6, 23.5, -32], [-4, 22.5, -32]],
+                [[-4, 22.5, -32], [-3, 20, -32]],
+                [[-3, 20, -32], [-5, 18, -32]],
+                [[-5, 18, -32], [-8, 19, -32]],
+                [[-8, 19, -32], [-10, 22, -32]]
+            ],
+            center: new THREE.Vector3(-6.5, 21, -32)
+        },
+        {
+            name: "カシオペヤ座",
+            lines: [
+                [[5, 25, -32], [7, 23, -32]],
+                [[7, 23, -32], [8, 24, -32]],
+                [[8, 24, -32], [10, 22, -32]],
+                [[10, 22, -32], [12, 24.5, -32]]
+            ],
+            center: new THREE.Vector3(8.5, 23.5, -32)
+        },
+        {
+            name: "はくちょう座",
+            lines: [
+                [[0, 24, -32], [0, 16, -32]], // 縦軸
+                [[-4, 21, -32], [4, 21, -32]]  // 横軸
+            ],
+            center: new THREE.Vector3(0, 21, -32)
+        }
+    ];
+
+    const data = dataList[Math.floor(Math.random() * dataList.length)];
+    const group = new THREE.Group();
+    const mat = new THREE.LineBasicMaterial({
+        color: 0x80f0ff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending
+    });
+
+    data.lines.forEach(seg => {
+        const p1 = new THREE.Vector3().fromArray(seg[0]);
+        const p2 = new THREE.Vector3().fromArray(seg[1]);
+        const geom = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+        const line = new THREE.Line(geom, mat);
+        group.add(line);
+
+        // 各ジョイント部に小さな光る星を置く
+        const starGeom = new THREE.SphereGeometry(0.2, 8, 8);
+        const starMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending
+        });
+        const star = new THREE.Mesh(starGeom, starMat);
+        star.position.copy(p1);
+        group.add(star);
+    });
+
+    // 衝突判定用のダミー球体
+    const hitGeom = new THREE.SphereGeometry(3.5, 8, 8);
+    const hitMat = new THREE.MeshBasicMaterial({
+        visible: false
+    });
+    const hitMesh = new THREE.Mesh(hitGeom, hitMat);
+    hitMesh.position.copy(data.center);
+    hitMesh.name = "skyPlanet"; // 既存のraycastで検出されるようにする
+    hitMesh.userData = {
+        planetId: "constellation_" + data.name,
+        planetData: {
+            name: data.name,
+            climate: "天空に輝く星々の連なり",
+            plants: { length: "無限" },
+            activeVillagers: { filter: () => ({ length: 0 }) }
+        },
+        parentGroup: group,
+        baseScale: 1.0
+    };
+    group.add(hitMesh);
+    skyPlanets.push(hitMesh); // インタラクション対象に追加
+
+    lookUpGroup.add(group);
+    skyConstellations.push({
+        group: group,
+        materials: [mat], // あとで一括で透明度をコントロールするため
+        age: 0,
+        maxAge: 12.0,
+        hitMesh: hitMesh
+    });
+
+    // すべてのMeshBasicMaterialを集める
+    group.traverse(child => {
+        if (child.isMesh && child !== hitMesh) {
+            skyConstellations[skyConstellations.length - 1].materials.push(child.material);
+        }
+    });
+}
+
+function startMeteorShower() {
+    isMeteorShower = true;
+    meteorShowerTimer = 12.0 + Math.random() * 8.0;
+    showVillagerNotification("★ 上空で流星群が発生しました！流れ星が降り注いでいます！", null, 6000);
+    lookUpReactionCooldown = 0; // 流星群は必ず反応させる
+    showLookUpPlayerReaction('meteor');
+}
+
+function spawnLookUpSatellite() {
+    showLookUpPlayerReaction('satellite');
+    const group = new THREE.Group();
+    
+    // 衛星本体（金色）
+    const bodyGeom = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+    const bodyMat = new THREE.MeshStandardMaterial({
+        color: 0xffd700,
+        roughness: 0.1,
+        metalness: 0.9
+    });
+    const body = new THREE.Mesh(bodyGeom, bodyMat);
+    group.add(body);
+
+    // ソーラーパネル（青色・左右）
+    const panelGeom = new THREE.BoxGeometry(2.2, 0.05, 0.5);
+    const panelMat = new THREE.MeshStandardMaterial({
+        color: 0x0055ff,
+        emissive: 0x001133,
+        roughness: 0.2,
+        metalness: 0.8
+    });
+    const leftPanel = new THREE.Mesh(panelGeom, panelMat);
+    leftPanel.position.x = 1.3;
+    const rightPanel = new THREE.Mesh(panelGeom, panelMat);
+    rightPanel.position.x = -1.3;
+    group.add(leftPanel);
+    group.add(rightPanel);
+
+    // 衝突判定用
+    const hitGeom = new THREE.SphereGeometry(1.5, 8, 8);
+    const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+    const hitMesh = new THREE.Mesh(hitGeom, hitMat);
+    hitMesh.name = "skyPlanet";
+    const satelliteTypes = ["人工衛星", "観測デブリ", "気象観測サテライト", "スペースゴミ"];
+    const sName = satelliteTypes[Math.floor(Math.random() * satelliteTypes.length)];
+    hitMesh.userData = {
+        planetId: "satellite_" + sName,
+        planetData: {
+            name: sName,
+            climate: "等速で軌道を回る人工の物体",
+            plants: { length: "なし" },
+            activeVillagers: { filter: () => ({ length: 0 }) }
+        },
+        parentGroup: group,
+        baseScale: 1.0
+    };
+    group.add(hitMesh);
+    skyPlanets.push(hitMesh);
+
+    const fromLeft = Math.random() < 0.5;
+    const startX = fromLeft ? -75 : 75;
+    const startY = ASTEROID_RADIUS + 12 + Math.random() * 8;
+    const startZ = -28 + (Math.random() - 0.5) * 8;
+    group.position.set(startX, startY, startZ);
+    
+    // 少し傾ける
+    group.rotation.x = Math.random() * 0.4;
+    group.rotation.y = Math.random() * Math.PI;
+
+    lookUpGroup.add(group);
+    skySatellites.push({
+        group: group,
+        dir: new THREE.Vector3(fromLeft ? 1 : -1, (Math.random() - 0.5) * 0.05, 0).normalize(),
+        speed: 18.0 + Math.random() * 8.0,
+        hitMesh: hitMesh
+    });
+}
+
+function spawnLookUpSpaceJellyfish() {
+    showLookUpPlayerReaction('jellyfish');
+    const group = new THREE.Group();
+    
+    // クラゲの傘（半透明）
+    const capGeom = new THREE.SphereGeometry(1.2, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+    const capMat = new THREE.MeshPhysicalMaterial({
+        color: 0xff00aa,
+        emissive: 0x3d0029,
+        transparent: true,
+        opacity: 0.65,
+        transmission: 0.8,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+    });
+    const cap = new THREE.Mesh(capGeom, capMat);
+    cap.rotation.x = Math.PI; // 下向きにする
+    group.add(cap);
+
+    // 触手 (3本)
+    const tentacleMat = new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.7,
+        blending: THREE.AdditiveBlending
+    });
+    const tentacles = [];
+    for (let i = 0; i < 3; i++) {
+        const tGeom = new THREE.CylinderGeometry(0.08, 0.02, 2.0, 4);
+        tGeom.translate(0, -1, 0); // 原点を上端にする
+        const tentacle = new THREE.Mesh(tGeom, tentacleMat);
+        const angle = (i / 3) * Math.PI * 2;
+        tentacle.position.set(Math.cos(angle) * 0.6, -0.2, Math.sin(angle) * 0.6);
+        group.add(tentacle);
+        tentacles.push(tentacle);
+    }
+
+    const startX = 80;
+    const startY = ASTEROID_RADIUS + 15 + Math.random() * 5;
+    const startZ = -35 + (Math.random() - 0.5) * 6;
+    group.position.set(startX, startY, startZ);
+
+    lookUpGroup.add(group);
+    skyJellyfish.push({
+        group: group,
+        tentacles: tentacles,
+        dir: new THREE.Vector3(-1, (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1).normalize(),
+        speed: 6.0 + Math.random() * 3.0,
+        age: Math.random() * 100
+    });
+}
+
+function spawnLookUpBlackHole() {
+    showLookUpPlayerReaction('blackhole');
+    const group = new THREE.Group();
+    
+    // コア（真黒球体）
+    const coreGeom = new THREE.SphereGeometry(2.0, 16, 16);
+    const coreMat = new THREE.MeshBasicMaterial({
+        color: 0x000000
+    });
+    const core = new THREE.Mesh(coreGeom, coreMat);
+    group.add(core);
+
+    // 降着円盤（アキュレーションディスク）
+    const ringGeom = new THREE.RingGeometry(2.2, 5.0, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xff4500,
+        transparent: true,
+        opacity: 0.85,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    const ring = new THREE.Mesh(ringGeom, ringMat);
+    ring.rotation.x = Math.PI / 2.5;
+    group.add(ring);
+
+    const posX = -45 + Math.random() * 10;
+    const posY = ASTEROID_RADIUS + 22 + Math.random() * 4;
+    const posZ = -38;
+    group.position.set(posX, posY, posZ);
+
+    lookUpGroup.add(group);
+    blackHoles.push({
+        group: group,
+        ring: ring,
+        age: 0,
+        maxAge: 18.0 + Math.random() * 7.0
+    });
+}
+
+function spawnLookUpRocket() {
+    showLookUpPlayerReaction('rocket');
+    const group = new THREE.Group();
+
+    // 胴体
+    const bodyGeom = new THREE.CylinderGeometry(0.5, 0.5, 2.5, 8);
+    const bodyMat = new THREE.MeshStandardMaterial({
+        color: 0xeeeeee,
+        roughness: 0.4,
+        metalness: 0.2
+    });
+    const body = new THREE.Mesh(bodyGeom, bodyMat);
+    group.add(body);
+
+    // 先端コーン
+    const noseGeom = new THREE.ConeGeometry(0.5, 1.0, 8);
+    const noseMat = new THREE.MeshStandardMaterial({
+        color: 0xff3333
+    });
+    const nose = new THREE.Mesh(noseGeom, noseMat);
+    nose.position.y = 1.75;
+    group.add(nose);
+
+    // フィン
+    const finGeom = new THREE.BoxGeometry(1.6, 0.6, 0.1);
+    const finMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
+    const fin = new THREE.Mesh(finGeom, finMat);
+    fin.position.y = -1.0;
+    group.add(fin);
+
+    const startX = -35 + Math.random() * 70;
+    const startY = ASTEROID_RADIUS;
+    const startZ = -30 + (Math.random() - 0.5) * 10;
+    group.position.set(startX, startY, startZ);
+
+    // やや斜め上を向くように回転
+    group.rotation.z = (Math.random() - 0.5) * 0.3;
+
+    lookUpGroup.add(group);
+    skyRockets.push({
+        group: group,
+        speed: 15.0 + Math.random() * 8.0
+    });
+
+    if (audioCtx && audioCtx.state === 'running') {
+        playFootstep(0.5); // ロケット発射音代わり
+    }
+}
+
+function spawnRocketParticle(pos) {
+    const geom = new THREE.SphereGeometry(0.15 + Math.random() * 0.15, 4, 4);
+    const mat = new THREE.MeshBasicMaterial({
+        color: Math.random() < 0.6 ? 0xff5500 : 0xffcc00,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.position.copy(pos);
+    lookUpGroup.add(mesh);
+    rocketParticles.push({
+        mesh: mesh,
+        dir: new THREE.Vector3((Math.random() - 0.5) * 0.8, -1.5, (Math.random() - 0.5) * 0.8).normalize(),
+        speed: 4.0 + Math.random() * 3.0,
+        age: 0,
+        maxAge: 0.6 + Math.random() * 0.4
+    });
 }
 
 // 住民数UI の初回更新
@@ -10683,9 +11377,33 @@ if (continueBtn) {
     }
     continueBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (loadGame()) {
-            startGame(true);
+        
+        const loadOverlay = document.getElementById('load-overlay');
+        if (loadOverlay) {
+            loadOverlay.style.display = 'flex';
+            loadOverlay.style.opacity = '1';
         }
+        
+        setTimeout(() => {
+            if (loadGame()) {
+                startGame(true);
+                
+                setTimeout(() => {
+                    if (loadOverlay) {
+                        loadOverlay.style.transition = 'opacity 0.6s ease';
+                        loadOverlay.style.opacity = '0';
+                        setTimeout(() => {
+                            loadOverlay.style.display = 'none';
+                            loadOverlay.style.transition = '';
+                        }, 600);
+                    }
+                }, 1000);
+            } else {
+                if (loadOverlay) {
+                    loadOverlay.style.display = 'none';
+                }
+            }
+        }, 600);
     });
 }
 

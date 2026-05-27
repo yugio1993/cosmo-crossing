@@ -1394,6 +1394,61 @@ body {
     border-color: rgba(255, 255, 255, 0.95) transparent transparent transparent;
 }
 
+/* 見上げるモード用プレイヤーフキダシ */
+#lookup-speech-bubble {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    background: rgba(10, 15, 40, 0.88);
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 18px;
+    font-family: var(--font-family);
+    font-weight: 700;
+    font-size: 0.9rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45), 0 0 12px rgba(0, 240, 255, 0.25);
+    border: 1.5px solid rgba(0, 240, 255, 0.35);
+    pointer-events: none;
+    z-index: 100;
+    white-space: nowrap;
+    line-height: 1.4;
+    backdrop-filter: blur(10px);
+    animation: lookupBubbleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+    max-width: 280px;
+    white-space: normal;
+    text-align: center;
+    text-shadow: 0 0 6px rgba(0, 240, 255, 0.3);
+}
+
+#lookup-speech-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -9px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 9px 7px 0;
+    border-style: solid;
+    border-color: rgba(0, 240, 255, 0.35) transparent transparent transparent;
+}
+
+#lookup-speech-bubble::before {
+    content: '';
+    position: absolute;
+    bottom: -7px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 7px 5px 0;
+    border-style: solid;
+    border-color: rgba(10, 15, 40, 0.88) transparent transparent transparent;
+    z-index: 1;
+}
+
+@keyframes lookupBubbleIn {
+    from { opacity: 0; transform: translate(-50%, -100%) scale(0.75); }
+    to   { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+}
+
+
+
 /* ==========================================
    隴・ｽｰ邵ｺ蜉ｱ・櫁抄荳茨ｽｺ・ｺ陋ｻ・ｰ騾ｹﾂ鬨ｾ螟り｡咲ｹ晁ｼ斐￥郢敖郢ｧ・ｷ繝ｻ閧ｲ蛻､鬮ｱ・｢陝ｾ・ｦ陋幢ｽｴ繝ｻ繝ｻ   ========================================== */
 .arrival-toast {

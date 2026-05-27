@@ -49,6 +49,9 @@
         <!-- フキダシ (3D空間連動) -->
         <div id="world-talk-bubble" style="display: none;">💬 はなす</div>
 
+        <!-- 見上げるモード用プレイヤーフキダシ -->
+        <div id="lookup-speech-bubble" style="display: none;"></div>
+
 
         <!-- 左上: ゲームタイトルパネル＆惑星ダッシュボード -->
         <div class="top-left-panel glass">
@@ -275,6 +278,14 @@
         <div class="warp-loader">
             <div class="warp-portal-effect"></div>
             <p id="warp-loading-text">ワープ中...</p>
+        </div>
+    </div>
+
+    <!-- 全画面ロードフェード演出 -->
+    <div id="load-overlay" class="warp-overlay" style="display: none;">
+        <div class="warp-loader">
+            <div class="warp-portal-effect" style="border-top-color: #00bfff; border-bottom-color: #ffd166; border-left-color: #06d6a0;"></div>
+            <p id="load-loading-text">ロード中...</p>
         </div>
     </div>
 
