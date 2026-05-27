@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmo Crossing - 宇宙の小惑星開拓スローライフ</title>
+    <!-- Google Fonts: Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <!-- Vanilla CSS v56 -->
+    <link rel="stylesheet" href="style_v56.css">
+</head>
+<body>
+    <!-- ゲーム画面を描画するCanvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- ========================================== -->
+    <!-- タイトル画面                               -->
+    <!-- ========================================== -->
+    <div id="title-screen">
+        <div class="title-stars" id="title-stars"></div>
+        <div class="title-content">
+            <div class="title-planet-deco">🪐</div>
+            <h1 class="title-logo">COSMO<br>CROSSING</h1>
+            <p class="title-tagline">宇宙の小惑星で、のんびりスローライフを。</p>
+            <div class="title-feature-list">
+                <span>🌱 テラフォーミング</span>
+                <span>🐾 住人と交流</span>
+                <span>🌀 惑星間旅行</span>
+            </div>
+            <button id="btn-start" class="btn-start">
+                <span>✨ はじめる</span>
+            </button>
+            <p class="title-hint">画面クリックまたはEnterキーでも開始できます</p>
+        </div>
+        <div class="title-footer">
+            <span>🎵 サウンドを有効にして遊ぶことをおすすめします</span>
+        </div>
+    </div>
+
+    <!-- UI オーバーレイ (ゲーム中は表示) -->
+    <div id="ui-container" style="display: none;">
+        <!-- フキダシ (3D空間連動) -->
+        <div id="world-talk-bubble" style="display: none;">💬 はなす</div>
+
+        <!-- 左上: ゲームタイトルパネル＆惑星ダッシュボード -->
+        <div class="top-left-panel glass">
+            <h1 id="game-title">COSMO CROSSING</h1>
+            <p id="game-subtitle">宇宙の小惑星開拓スローライフ</p>
+            <!-- 惑星ステータスカード -->
+            <div id="planet-status-card">
+                <p class="status-planet">📍 現在の小惑星: <span id="current-planet-name">アルテミス</span></p>
+                <p class="status-climate">環境: <span id="current-planet-climate">ルミナス・ファンタジー</span></p>
+                <p class="status-time" id="time-display">🌤 昼</p>
+            </div>
+            <!-- 住人の出現ヒントパネル -->
+            <div id="villager-hint-section" style="margin-top: 10px; border-top: 1.5px solid rgba(255, 255, 255, 0.08); padding-top: 8px;">
+                <p style="font-size: 0.8rem; font-weight: 800; color: #ff85a1; margin-bottom: 4px; display: flex; align-items: center; gap: 4px;">
+                    <span>🛰️</span> 次の住人のヒント
+                </p>
+                <p id="hint-villager-clue" style="font-size: 0.75rem; color: #ffd166; font-weight: 600; margin-bottom: 4px;">噂：???</p>
+                <p style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">
+                    目標: <span id="hint-flower-need" style="color: #ff85a1; font-weight: 600;">花 -本</span> / <span id="hint-tree-need" style="color: #4ea8de; font-weight: 600;">木 -本</span>
+                </p>
+            </div>
+        </div>
+
+        <!-- 左下: コントロールボタンエリア -->
+        <div class="bottom-left-controls">
+            <button id="btn-guide" class="btn-guide-action active">
+                <span class="btn-icon">📡</span> ガイド: ON
+            </button>
+            <button id="btn-bgm" class="btn-bgm-action active">
+                <span class="btn-icon">🎵</span> BGM: ON
+            </button>
+            <button id="btn-tutorial" class="btn-tutorial-action">
+                <span class="btn-icon">🔰</span> チュートリアル
+            </button>
+        </div>
+
+        <!-- 右上: 操作説明パネル (時間経過で折りたたみ) -->
+        <div class="control-panel glass" id="control-panel">
+            <h2>操作方法</h2>
+            <ul>
+                <li><span class="key">W</span><span class="key">S</span><span class="key">A</span><span class="key">D</span> : 歩く</li>
+                <li><span class="key">Space</span> : ジャンプ (長押しでホバー)</li>
+                <li><span class="key">R</span> : 花/キノコを植える</li>
+                <li><span class="key">T</span> : 木を植える</li>
+                <li><span class="key">E</span> / クリック : 収穫 / アクション / 会話送り</li>
+                <li><span class="key">F</span> : 住人に果物をあげる</li>
+                <li style="margin-top: 5px; color: #ffd166; font-size: 0.75rem;">🔊 画面クリックで効果音有効</li>
+            </ul>
+        </div>
+
+        <!-- 中央下部: アクションボタンエリア -->
+        <div class="action-panel">
+            <button id="btn-plant-flower" class="btn-primary">
+                <span class="btn-icon">🌸</span> 花を植える (R)
+            </button>
+            <button id="btn-plant-tree" class="btn-primary btn-primary-tree">
+                <span class="btn-icon">🌳</span> 木を植える (T)
+            </button>
+            <button id="btn-harvest" class="btn-primary btn-primary-harvest" style="display: none;">
+                <span class="btn-icon">🍎</span> 収穫する (E)
+            </button>
+            <button id="btn-collect-seed" class="btn-primary btn-primary-harvest" style="display: none;">
+                <span class="btn-icon">🌾</span> 採取する (E)
+            </button>
+            <button id="btn-talk" class="btn-talk-action" style="display: none;">
+                <span class="btn-icon">💬</span> 話す (E)
+            </button>
+            <button id="btn-present" class="btn-present-action" style="display: none;">
+                <span class="btn-icon">🎁</span> プレゼント (F)
+            </button>
+            <button id="btn-warp" class="btn-warp-action" style="display: none;">
+                <span class="btn-icon">🌀</span> ポータル起動 (E)
+            </button>
+            <button id="btn-lookup" class="btn-lookup-action">
+                <span class="btn-icon">🔭</span> 見上げる (V)
+            </button>
+        </div>
+
+        <!-- 右下: カウントパネル -->
+        <div class="stats-panel glass" style="display: flex; flex-direction: column; gap: 8px;">
+            <p>🌸 花: <span id="flower-count">0</span> 本</p>
+            <p>🌳 木: <span id="tree-count">0</span> 本</p>
+            <p>👥 住民: <span id="villager-count">0</span> 人</p>
+            <p>🍎 所持果物: <span id="fruit-count">0</span> 個</p>
+            <p>🌐 緑化率: <span id="green-rate">0</span>%</p>
+            
+            <div class="inventory-section">
+                <p class="inv-title">🎒 インベントリ</p>
+                <p class="inv-item-grass">🌾 草のタネ: <span id="inv-grass-seeds">50</span> 個</p>
+                
+                <p class="inv-subtitle inv-subtitle-flower">🌸 花のタネ (クリックで選択):</p>
+                <div id="inv-flower-seeds-list" class="inv-list"></div>
+                
+                <p class="inv-subtitle inv-subtitle-tree">🌳 木の苗 (クリックで選択):</p>
+                <div id="inv-tree-saplings-list" class="inv-list"></div>
+            </div>
+        </div>
+
+        <!-- 新しい住人到着通知フキダシ -->
+        <div id="arrival-toast" class="arrival-toast" style="display: none;">
+            <div class="arrival-toast-content">
+                <span class="arrival-toast-icon">🚀</span>
+                <span id="arrival-toast-text">新しい住人がやってきました！</span>
+            </div>
+        </div>
+
+        <!-- 惑星ホバー時の見上げるツールチップ -->
+        <div id="lookup-tooltip" class="lookup-tooltip glass" style="display: none;">
+            <h3 id="tooltip-planet-name">惑星名</h3>
+            <p id="tooltip-planet-climate">環境名</p>
+            <div class="tooltip-stats" style="margin-top: 6px; display: flex; flex-direction: column; gap: 3px; font-size: 0.75rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 5px;">
+                <p>🌱 植物: <span id="tooltip-plant-count">0</span> 本</p>
+                <p>👥 住民: <span id="tooltip-villager-count">0</span> 人</p>
+            </div>
+        </div>
+
+        <!-- 会話ダイアログウィンドウ -->
+        <div id="dialog-box" class="glass-dialog" style="display: none;">
+            <div class="dialog-header">
+                <span id="dialog-speaker">ニャンコ宇宙飛行士</span>
+                <button id="btn-skip-intro" class="btn-skip-intro" style="display: none;">導入をスキップ ⏩</button>
+            </div>
+            <div id="dialog-text">ここに会話文が表示されます。</div>
+            
+            <!-- 定住選択肢コンテナ -->
+            <div id="dialog-options" style="display: none;">
+                <button class="btn-option" id="opt-yes">ぜひ住んで！</button>
+                <button class="btn-option" id="opt-no">また今度ね</button>
+            </div>
+            
+            <div class="dialog-footer">
+                <span class="dialog-next-tip" id="dialog-tip">画面またはEクリックで閉じる</span>
+            </div>
+        </div>
+
+        <!-- 惑星間ワープメニューモーダル -->
+        <div id="warp-modal" class="glass-dialog warp-modal" style="display: none;">
+            <div class="dialog-header" style="justify-content: center;">
+                <span>🌀 宇宙ワープポータル</span>
+            </div>
+            <p class="warp-desc">移動先の小惑星を選択してください。各惑星の開拓状態は保存されます。</p>
+            
+            <div class="planet-cards-container">
+                <!-- 惑星1 -->
+                <div class="planet-card active" id="card-artemis">
+                    <div class="planet-icon">🌸</div>
+                    <div class="planet-info">
+                        <h3>アルテミス</h3>
+                        <p>ファンタジー</p>
+                        <span class="planet-stat">植物: <span id="stat-artemis-plants">0</span></span>
+                        <span class="planet-stat-villager">住民: <span id="stat-artemis-villagers">0</span> 人</span>
+                    </div>
+                </div>
+                <!-- 惑星2 -->
+                <div class="planet-card" id="card-boreas">
+                    <div class="planet-icon">❄️</div>
+                    <div class="planet-info">
+                        <h3>ボレアス</h3>
+                        <p>アイス・クリスタル</p>
+                        <span class="planet-stat">植物: <span id="stat-boreas-plants">0</span></span>
+                        <span class="planet-stat-villager">住民: <span id="stat-boreas-villagers">0</span> 人</span>
+                    </div>
+                </div>
+                <!-- 惑星3 -->
+                <div class="planet-card" id="card-helios">
+                    <div class="planet-icon">🌵</div>
+                    <div class="planet-info">
+                        <h3>ヘリオス</h3>
+                        <p>黄金の砂漠</p>
+                        <span class="planet-stat">植物: <span id="stat-helios-plants">0</span></span>
+                        <span class="planet-stat-villager">住民: <span id="stat-helios-villagers">0</span> 人</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="dialog-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);">
+                <button id="btn-warp-close" class="btn-option" style="max-width: 110px; font-size: 0.9rem; padding: 0.5rem 1rem; box-shadow: 0 4px 0 #d9ab3d; margin: 0;">閉じる</button>
+                <span class="dialog-next-tip" style="animation: none; background: none; border: none; padding: 0;">移動先の星カードをクリック</span>
+            </div>
+        </div>
+
+        <!-- チュートリアル概要モーダル -->
+        <div id="tutorial-summary-modal" class="glass-dialog warp-modal" style="display: none; max-width: 500px;">
+            <div class="dialog-header" style="justify-content: center;">
+                <span>🔰 チュートリアル概要</span>
+            </div>
+            <div class="tutorial-summary-content" style="max-height: 350px; overflow-y: auto; text-align: left; padding: 10px; font-size: 0.85rem; line-height: 1.6; color: #fff;">
+                <h3 style="color: #ff85a1; margin-top: 0; margin-bottom: 8px;">🌸 花の植え方</h3>
+                <p style="margin-bottom: 12px; margin-left: 8px;">地面に立っているときに<strong>Rキー</strong>を押すか、画面下の「🌸 花を植える」ボタンを押します。</p>
+
+                <h3 style="color: #4ea8de; margin-bottom: 8px;">🌳 木の植え方</h3>
+                <p style="margin-bottom: 12px; margin-left: 8px;">地面に立っているときに<strong>Tキー</strong>を押すか、画面下の「🌳 木を植える」ボタンを押します。木が育つと美味しい果物が実ります。</p>
+
+                <h3 style="color: #ffd166; margin-bottom: 8px;">🌱 草の植え方</h3>
+                <p style="margin-bottom: 12px; margin-left: 8px;">ジャンプ中（Spaceキー）に<strong>Rキー</strong>または<strong>Tキー</strong>を押すか、画面下のボタンを押して「草のタネ」を地面に向けて発射します。</p>
+
+                <h3 style="color: #a78bfa; margin-bottom: 8px;">🎒 タネや苗の入手方法</h3>
+                <p style="margin-bottom: 6px; margin-left: 8px;">・<strong>花のタネ / 木の苗</strong>: この星に遊びに来てくれた住人に話しかけると、たまにお裾分けとしてもらえます。</p>
+                <p style="margin-bottom: 12px; margin-left: 8px;">・<strong>草のタネ</strong>: すでに生えている草の上を歩いていると、たまに足元から拾って補充できます。</p>
+
+                <h3 style="color: #06d6a0; margin-bottom: 8px;">👥 住人を呼ぶには</h3>
+                <p style="margin-bottom: 4px; margin-left: 8px;">花や木をたくさん植えて惑星を綺麗にしていると、その美しさに惹かれて住人がロケットで遊びに来てくれます。</p>
+                <p style="margin-bottom: 4px; margin-left: 8px;">住人たちがこの星を気に入ると、定住の相談をしてくることがあります。</p>
+            </div>
+            <div class="dialog-footer" style="display: flex; justify-content: center; margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);">
+                <button id="btn-tutorial-summary-close" class="btn-option" style="max-width: 120px; font-size: 0.9rem; padding: 0.5rem 1rem; box-shadow: 0 4px 0 #d9ab3d; margin: 0;">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 全画面ワープフェード演出 -->
+    <div id="warp-overlay" class="warp-overlay" style="display: none;">
+        <div class="warp-loader">
+            <div class="warp-portal-effect"></div>
+            <p id="warp-loading-text">ワープ中...</p>
+        </div>
+    </div>
+
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Game Controller Logic v56 -->
+    <script src="game_v56.js"></script>
+</body>
+</html>
