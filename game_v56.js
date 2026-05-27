@@ -4975,6 +4975,12 @@ btnPresentEl.addEventListener('click', (e) => {
     presentFruit();
 });
 
+// ポータル起動ボタンのクリック
+btnWarpEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openWarpMenu();
+});
+
 // ダイアログボックスをクリックした際の送り
 dialogBoxEl.addEventListener('click', (e) => {
     e.stopPropagation();
