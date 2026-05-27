@@ -1013,6 +1013,8 @@ const planetsData = {
         plants: [],
         activeVillagers: [],
         completedMilestones: [], // マイルストーン達成状態
+        unlockedVillagerIds: [], // 一度出現した住人のIDリスト
+        unlockedVillagersInfo: {}, // 住人のマイルストーン条件などの情報
         houses: [], // v50: 家データ保存用
         particleType: "sparkle",
         gravity: 25.0,
@@ -1053,6 +1055,8 @@ const planetsData = {
         plants: [],
         activeVillagers: [],
         completedMilestones: [], // マイルストーン達成状態
+        unlockedVillagerIds: [], // 一度出現した住人のIDリスト
+        unlockedVillagersInfo: {}, // 住人のマイルストーン条件などの情報
         houses: [], // v50: 家データ保存用
         particleType: "snow",
         gravity: 13.0,
@@ -1093,6 +1097,8 @@ const planetsData = {
         plants: [],
         activeVillagers: [],
         completedMilestones: [], // マイルストーン達成状態
+        unlockedVillagerIds: [], // 一度出現した住人のIDリスト
+        unlockedVillagersInfo: {}, // 住人のマイルストーン条件などの情報
         houses: [], // v50: 家データ保存用
         particleType: "gold",
         gravity: 42.0,
@@ -3353,8 +3359,35 @@ function createVillagerMesh(typeData) {
 }
 
 // 住人の新規作成・小惑星への出現処理
-function spawnVillager(typeData, milestone) {
+function spawnVillager(typeData, milestone, isRevisitor = false) {
     const { group, visualGroup, beacon } = createVillagerMesh(typeData);
+
+    // 一度出現した住人のIDとマイルストーン条件を記録
+    if (!currentPlanet.unlockedVillagerIds) {
+        currentPlanet.unlockedVillagerIds = [];
+    }
+    if (!currentPlanet.unlockedVillagerIds.includes(typeData.id)) {
+        currentPlanet.unlockedVillagerIds.push(typeData.id);
+    }
+    if (!currentPlanet.unlockedVillagersInfo) {
+        currentPlanet.unlockedVillagersInfo = {};
+    }
+    if (milestone) {
+        currentPlanet.unlockedVillagersInfo[typeData.id] = {
+            settleReqFlower: milestone.settleReqFlower,
+            settleReqTree: milestone.settleReqTree,
+            milestoneId: milestone.id
+        };
+    } else if (!currentPlanet.unlockedVillagersInfo[typeData.id]) {
+        // フォールバック用の適度な条件
+        currentPlanet.unlockedVillagersInfo[typeData.id] = {
+            settleReqFlower: 8,
+            settleReqTree: 4,
+            milestoneId: -1
+        };
+    }
+
+    const info = currentPlanet.unlockedVillagersInfo[typeData.id];
 
     // プレイヤーの位置を取得し、地表上のベース位置を算出
     const pPos = new THREE.Vector3();
@@ -3465,9 +3498,11 @@ function spawnVillager(typeData, milestone) {
         // 未定住の場合、一定時間後に自動的に旅立つタイマー (180〜360秒)
         stayTimer: 180.0 + Math.random() * 180.0,
         warningShown: false, // 1分前警告を表示済みかどうか
-        milestoneId: milestone ? milestone.id : -1, // やってきた条件のマイルストーンID
-        settleReqFlower: milestone ? milestone.settleReqFlower : 0, // 定住申し込みに必要な花の数
-        settleReqTree:   milestone ? milestone.settleReqTree   : 0  // 定住申し込みに必要な木の数
+        milestoneId: info.milestoneId, // やってきた条件のマイルストーンID
+        settleReqFlower: info.settleReqFlower, // 定住申し込みに必要な花の数
+        settleReqTree:   info.settleReqTree,   // 定住申し込みに必要な木の数
+        isRevisitor: isRevisitor, // 再来した住人かどうか
+        hasSpokenThisVisit: false // この来訪で話しかけられたかどうか
     };
 
     currentPlanet.activeVillagers.push(instance);
@@ -3586,6 +3621,79 @@ function getWeightedRandom(arr) {
 function generateVillagerDialogue(target) {
     const typeId = target.typeData.id;
     const plantCount = currentPlanet.plants.length;
+
+    // 0. 再来時の初回会話
+    if (target.isRevisitor && !target.hasSpokenThisVisit) {
+        target.hasSpokenThisVisit = true;
+        const revisitorDialogues = {
+            cat: [
+                "ニャッホー！また来ちゃったニャ！ここの居心地が忘れられなくて、宇宙船をUターンさせちゃったニャ！",
+                "ふにゃ〜！またこの星の綺麗な空気に会いに来たニャ！ただいまニャ！",
+                "ニャァー！やっぱりこの星が一番落ち着くニャ！またしばらくお邪魔するニャ！"
+            ],
+            rabbit: [
+                "ピョンピョン！また来ちゃったピョン！ここのフカフカな地面が恋しかったピョン！",
+                "やっほーピョン！また遊びに来たピョン！また一緒に遊んでほしいピョン！",
+                "ピョン！この星の綺麗な景色が忘れられなくて、またロケットで飛んできたピョン！"
+            ],
+            dog: [
+                "ワンワン！また来ちゃったワン！こ高的いい匂いが懐かしくて、また戻ってきたワン！",
+                "ハァハァ、ワン！またこの星に遊びに来れて嬉しいワン！またよろしくワン！",
+                "ワンッ！やっぱりこの星が大好きで、またロケットを走らせて来ちゃったワン！"
+            ],
+            bear: [
+                "うむ、また来てしまったクマ。ここの素晴らしい癒やし効果が忘れられなくてね。",
+                "やあ、開拓者君。また少しばかりこの星でお世話になるクマ。ここのお昼寝スポットは最高だからな。",
+                "ふむ、やはりこの美しい景色が恋しくなって、また戻ってきたクマ。よろしく頼むクマ。"
+            ],
+            bee: [
+                "ブーン！お花の香りに誘われて、また戻ってきちゃったブーン！",
+                "ハチスケ、ただいま戻ったブーン！やっぱりここが一番のお気に入りだブーン！"
+            ],
+            koala: [
+                "ふあぁ……のんびりしたくなって、また木登りに来ちゃったコアラ……",
+                "コアラノシン、また来たコアラ。ここの木の香りはやっぱり落ち着くコアラ。"
+            ],
+            fox: [
+                "コンコン！また来ちゃったコン！ここの不思議な魅力に引き寄せられたコン！",
+                "コン太、ただいま参上コン！またお喋りしに来たコンよ！"
+            ],
+            mouse: [
+                "チュウ！また走り回りに来ちゃったチュウ！やっぱりここが最高だチュウ！",
+                "ヤッホーチュウ！また遊びに来たチュウ！"
+            ],
+            pig: [
+                "ブヒッ！ここの美味しい空気が恋しくて、また戻ってきたブヒ！",
+                "ただいまブヒ！またしばらくのんびりさせてほしいブヒ！"
+            ],
+            frog: [
+                "ケロケロ！また大ジャンプしにきちゃったケロ！ただいまケロ！",
+                "ケロ！ここの快適な湿度が忘れられなくて、また遊びに来たケロ！"
+            ],
+            alien: [
+                "ピピッ……やはりこの星の安定したエネルギーフィールドが恋しくなり、再訪したゾル。",
+                "システムチェック……再訪完了ゾル。またよろしくゾル。"
+            ],
+            panda: [
+                "パオーン！パン助、また来たパン！またのんびり転がらせてほしいパン！",
+                "パンダはやはりここがお気に入りだパン！また戻ってきたパン！"
+            ],
+            monkey: [
+                "ウキッ！また美味しい果物を食べにきちゃったウキ！ただいまウキ！",
+                "サル吉、また来たウキ！また木登りさせてほしいウキ！"
+            ],
+            sheep: [
+                "メェ〜！ふわふわの草が恋しくて、また戻ってきたメェ〜。",
+                "メエ子、ただいまメェ。また美味しい草をはんでもいいメェ？"
+            ],
+            squirrel: [
+                "キキッ！また木の実の様子を見に来ちゃったリス！ただいまリス！",
+                "やっぱりここが一番の秘密基地だリス！また遊びに来たリス！"
+            ]
+        };
+        const list = revisitorDialogues[typeId] || ["また遊びに来ちゃった！ただいま！"];
+        return getWeightedRandom(list);
+    }
 
     // 1. 植物不足（5本未満）のおねだり（柔らかい口調のバリエーション）
     if (plantCount < 5) {
@@ -3983,6 +4091,79 @@ function generateVillagerDialogue(target) {
     const typeId = target.typeData.id;
     const plantCount = currentPlanet.plants.length;
 
+    // 0. 再来時の初回会話
+    if (target.isRevisitor && !target.hasSpokenThisVisit) {
+        target.hasSpokenThisVisit = true;
+        const revisitorDialogues = {
+            cat: [
+                "ニャッホー！また来ちゃったニャ！ここの居心地が忘れられなくて、宇宙船をUターンさせちゃったニャ！",
+                "ふにゃ〜！またこの星の綺麗な空気に会いに来たニャ！ただいまニャ！",
+                "ニャァー！やっぱりこの星が一番落ち着くニャ！またしばらくお邪魔するニャ！"
+            ],
+            rabbit: [
+                "ピョンピョン！また来ちゃったピョン！ここのフカフカな地面が恋しかったピョン！",
+                "やっほーピョン！また遊びに来たピョン！また一緒に遊んでほしいピョン！",
+                "ピョン！この星の綺麗な景色が忘れられなくて、またロケットで飛んできたピョン！"
+            ],
+            dog: [
+                "ワンワン！また来ちゃったワン！こ高的いい匂いが懐かしくて、また戻ってきたワン！",
+                "ハァハァ、ワン！またこの星に遊びに来れて嬉しいワン！またよろしくワン！",
+                "ワンッ！やっぱりこの星が大好きで、またロケットを走らせて来ちゃったワン！"
+            ],
+            bear: [
+                "うむ、また来てしまったクマ。ここの素晴らしい癒やし効果が忘れられなくてね。",
+                "やあ、開拓者君。また少しばかりこの星でお世話になるクマ。ここのお昼寝スポットは最高だからな。",
+                "ふむ、やはりこの美しい景色が恋しくなって、また戻ってきたクマ。よろしく頼むクマ。"
+            ],
+            bee: [
+                "ブーン！お花の香りに誘われて、また戻ってきちゃったブーン！",
+                "ハチスケ、ただいま戻ったブーン！やっぱりここが一番のお気に入りだブーン！"
+            ],
+            koala: [
+                "ふあぁ……のんびりしたくなって、また木登りに来ちゃったコアラ……",
+                "コアラノシン、また来たコアラ。ここの木の香りはやっぱり落ち着くコアラ。"
+            ],
+            fox: [
+                "コンコン！また来ちゃったコン！ここの不思議な魅力に引き寄せられたコン！",
+                "コン太、ただいま参上コン！またお喋りしに来たコンよ！"
+            ],
+            mouse: [
+                "チュウ！また走り回りに来ちゃったチュウ！やっぱりここが最高だチュウ！",
+                "ヤッホーチュウ！また遊びに来たチュウ！"
+            ],
+            pig: [
+                "ブヒッ！ここの美味しい空気が恋しくて、また戻ってきたブヒ！",
+                "ただいまブヒ！またしばらくのんびりさせてほしいブヒ！"
+            ],
+            frog: [
+                "ケロケロ！また大ジャンプしにきちゃったケロ！ただいまケロ！",
+                "ケロ！ここの快適な湿度が忘れられなくて、また遊びに来たケロ！"
+            ],
+            alien: [
+                "ピピッ……やはりこの星の安定したエネルギーフィールドが恋しくなり、再訪したゾル。",
+                "システムチェック……再訪完了ゾル。またよろしくゾル。"
+            ],
+            panda: [
+                "パオーン！パン助、また来たパン！またのんびり転がらせてほしいパン！",
+                "パンダはやはりここがお気に入りだパン！また戻ってきたパン！"
+            ],
+            monkey: [
+                "ウキッ！また美味しい果物を食べにきちゃったウキ！ただいまウキ！",
+                "サル吉、また来たウキ！また木登りさせてほしいウキ！"
+            ],
+            sheep: [
+                "メェ〜！ふわふわの草が恋しくて、また戻ってきたメェ〜。",
+                "メエ子、ただいまメェ。また美味しい草をはんでもいいメェ？"
+            ],
+            squirrel: [
+                "キキッ！また木の実の様子を見に来ちゃったリス！ただいまリス！",
+                "やっぱりここが一番の秘密基地だリス！また遊びに来たリス！"
+            ]
+        };
+        const list = revisitorDialogues[typeId] || ["また遊びに来ちゃった！ただいま！"];
+        return getWeightedRandom(list);
+    }
+
     // 1. 植物不足（5本未満）のおねだり（柔らかい口調のバリエーション）
     if (plantCount < 5) {
         const dialogs = {
@@ -4291,16 +4472,14 @@ function closeDialogue() {
 
     // v50: 定住が決まったらロケットに戻り、家づくりを開始
     let shouldCheckPortal = false;
-    if (currentSpeakerInstance && currentSpeakerInstance.settled) {
+    if (currentSpeakerInstance && currentSpeakerInstance.settled && currentSpeakerInstance.rocketInstance) {
         shouldCheckPortal = true;
         if (currentSpeakerInstance.state !== "GO_TO_ROCKET" && 
             currentSpeakerInstance.state !== "APPROACH_BUTTON" && 
             currentSpeakerInstance.state !== "PRESS_BUTTON" && 
             currentSpeakerInstance.state !== "HOUSE_MUTATION") {
             currentSpeakerInstance.state = "GO_TO_ROCKET";
-            if (currentSpeakerInstance.rocketInstance) {
-                currentSpeakerInstance.targetPos.copy(currentSpeakerInstance.rocketInstance.baseLocalPos);
-            }
+            currentSpeakerInstance.targetPos.copy(currentSpeakerInstance.rocketInstance.baseLocalPos);
             currentSpeakerInstance.beacon.visible = false;
         }
     }
@@ -4433,6 +4612,8 @@ optYesEl.addEventListener('click', (e) => {
     currentSpeakerInstance.settled = true;
     currentSpeakerInstance.bounce = 0.55;
     updateVillagerCountUI(); // 定住確定時に住民数を更新
+    saveGame(false);
+
     
     currentSpeakerInstance.happyJumpCount = 3;
     
@@ -4618,6 +4799,7 @@ function harvestFruit() {
             playHarvestSound();
             spawnStarburst(nearestTree.localPos);
             checkVillagerProximity();
+            saveGame(false);
         }
     }
 }
@@ -4684,6 +4866,7 @@ function collectSeed() {
         showVillagerNotification(`🌾 ${itemName} を採取しました！`);
         updateStatsUI();
         checkVillagerProximity();
+        saveGame(false);
     }
 }
 
@@ -4743,6 +4926,7 @@ function presentFruit() {
     dialogueTextIndex = 0;
     dialogTextEl.textContent = "";
     streamDialogueText();
+    saveGame(false);
 }
 
 // 接近判定 (住人、ポータル、収穫可能な木、採取可能な植物)
@@ -4896,8 +5080,11 @@ function closeWarpMenu() {
 function executeWarp(targetPlanetId) {
     if (targetPlanetId === currentPlanet.id || isWarping) return;
     
+    saveGame(false); // ワープ直前にセーブ
+    
     isWarping = true;
     closeWarpMenu();
+
     
     warpLoadingTextEl.textContent = `${planetsData[targetPlanetId].name} 小惑星へワープ軌道計算中...`;
     warpOverlayEl.style.display = "flex";
@@ -5089,8 +5276,29 @@ function executeWarp(targetPlanetId) {
                     const idx = fruit.userData.fruitIndex ?? 0;
                     const progress = p.fruitProgress[idx] ?? 1.0;
                     const baseScale = fruit.userData.baseScale ?? 1.0;
+                    
+                    if (fruit.material && !fruit.userData.materialCloned) {
+                        fruit.material = fruit.material.clone();
+                        fruit.userData.materialCloned = true;
+                        fruit.userData.originalEmissiveIntensity = fruit.material.emissiveIntensity ?? 1.0;
+                    }
+
+                    // 成長スケールで常に描写する
                     fruit.scale.setScalar(baseScale * progress);
                     fruit.visible = (progress > 0.08);
+
+                    if (progress >= 1.0) {
+                        // 完熟時は少し大きく強調し、輝かせる
+                        fruit.scale.setScalar(baseScale * 1.25);
+                        if (fruit.material) {
+                            fruit.material.emissiveIntensity = fruit.userData.originalEmissiveIntensity * 1.5;
+                        }
+                    } else {
+                        // 成長中は光らせない
+                        if (fruit.material) {
+                            fruit.material.emissiveIntensity = 0.0;
+                        }
+                    }
                 });
             }
             
@@ -5163,7 +5371,9 @@ function executeWarp(targetPlanetId) {
             isWarping = false;
             updatePortalVisibility(false);
             checkVillagerProximity();
+            saveGame(false); // ワープ完了後にオートセーブ
         }, 800);
+
         
     }, 1500);
 }
@@ -5461,11 +5671,69 @@ function updateFruits(delta) {
                 p.fruitProgress[idx] = progress;
             }
             
-            // 3Dスケールへの反映と極小時の非表示
+            if (fruit.material && !fruit.userData.materialCloned) {
+                fruit.material = fruit.material.clone();
+                fruit.userData.materialCloned = true;
+                fruit.userData.originalEmissiveIntensity = fruit.material.emissiveIntensity ?? 1.0;
+            }
+
+            // 成長スケールで常に描写する
             fruit.scale.setScalar(baseScale * progress);
             fruit.visible = (progress > 0.08);
+
+            if (progress >= 1.0) {
+                // 完熟時は少し大きく強調し、輝かせる
+                fruit.scale.setScalar(baseScale * 1.25);
+                if (fruit.material) {
+                    // 完熟時は本来の輝きをもとにゆっくりパルス明滅させる
+                    const pulse = 1.0 + Math.sin(Date.now() * 0.005) * 0.3;
+                    fruit.material.emissiveIntensity = fruit.userData.originalEmissiveIntensity * pulse;
+                }
+            } else {
+                // 成長中は光らせない
+                if (fruit.material) {
+                    fruit.material.emissiveIntensity = 0.0;
+                }
+            }
         });
     });
+}
+
+let revisitorSpawnTimer = 30.0 + Math.random() * 30.0;
+
+function updateRevisitorSpawn(delta) {
+    if (!gameStarted) return;
+    if (revisitorSpawnTimer === undefined) {
+        revisitorSpawnTimer = 30.0 + Math.random() * 30.0;
+    }
+    revisitorSpawnTimer -= delta;
+    if (revisitorSpawnTimer <= 0) {
+        revisitorSpawnTimer = 40.0 + Math.random() * 40.0; // 40〜80秒間隔
+        
+        if (!currentPlanet.unlockedVillagerIds) {
+            currentPlanet.unlockedVillagerIds = [];
+        }
+        const activeV = currentPlanet.activeVillagers || [];
+        
+        // 同時にこの惑星に存在できる「非定住」の住人が多すぎないようにする（例えば、非定住が現在1人以上の時はスポーンしない）
+        const nonSettledActive = activeV.filter(v => !v.settled && v.state !== "LEAVING" && v.state !== "LEAVING_PENDING");
+        if (nonSettledActive.length >= 1) {
+            return;
+        }
+        
+        const activeIds = activeV.map(v => v.id);
+        const inactiveUnlockedIds = currentPlanet.unlockedVillagerIds.filter(id => !activeIds.includes(id));
+        
+        if (inactiveUnlockedIds.length > 0) {
+            if (Math.random() < 0.5) { // 50%確率で出現
+                const randId = inactiveUnlockedIds[Math.floor(Math.random() * inactiveUnlockedIds.length)];
+                const typeData = villagerTypes.find(t => t.id === randId);
+                if (typeData) {
+                    spawnVillager(typeData, null, true);
+                }
+            }
+        }
+    }
 }
 
 function updateVillagers(delta) {
@@ -5912,6 +6180,11 @@ function updateVillagers(delta) {
         // v50: 定住演出ステート処理
         // ==========================================
         if (v.state === "GO_TO_ROCKET") {
+            if (!v.rocketInstance) {
+                v.state = "IDLE";
+                v.stateTimer = 2.0;
+                continue;
+            }
             const toRocket = new THREE.Vector3().subVectors(v.targetPos, v.localPos);
             const dist = toRocket.length();
             
@@ -5998,6 +6271,11 @@ function updateVillagers(delta) {
         }
 
         if (v.state === "PRESS_BUTTON") {
+            if (!v.rocketInstance) {
+                v.state = "IDLE";
+                v.stateTimer = 2.0;
+                continue;
+            }
             v.stateTimer -= delta;
             
             // ジャンプアニメーション
@@ -7071,6 +7349,7 @@ function plantObjectAtGrid(type) {
 
     updateStatsUI();
     playerBounce = 0.28;
+    saveGame(false);
 }
 
 // ==========================================
@@ -7320,23 +7599,25 @@ function buildNeonMushroom(parent) {
 // 4つの木の3Dモデリング関数 (果物メッシュに識別用タグを付与)
 // ==========================================
 function buildBerryTree(parent) {
-    const trunkGeom = new THREE.CylinderGeometry(0.08, 0.14, 0.75, 8);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4a42, roughness: 0.9 });
+    const trunkGeom = new THREE.CylinderGeometry(0.08, 0.16, 0.85, 8);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
     const trunk = new THREE.Mesh(trunkGeom, trunkMat);
-    trunk.position.y = 0.325;
+    trunk.position.y = 0.35;
     trunk.castShadow = true;
     parent.add(trunk);
 
     const leavesMat = new THREE.MeshStandardMaterial({ 
-        color: 0x3cb371, 
-        roughness: 0.85, 
+        color: 0x2e8b57, 
+        roughness: 0.9, 
         flatShading: true 
     });
 
     const leafPos = [
-        { pos: new THREE.Vector3(0, 0.825, 0), size: 0.45 },
-        { pos: new THREE.Vector3(-0.25, 0.675, 0.15), size: 0.32 },
-        { pos: new THREE.Vector3(0.22, 0.705, -0.2), size: 0.35 }
+        { pos: new THREE.Vector3(0, 0.9, 0), size: 0.55 },
+        { pos: new THREE.Vector3(-0.3, 0.75, 0.2), size: 0.38 },
+        { pos: new THREE.Vector3(0.28, 0.78, -0.2), size: 0.4 },
+        { pos: new THREE.Vector3(0.25, 0.7, 0.25), size: 0.35 },
+        { pos: new THREE.Vector3(-0.25, 0.72, -0.25), size: 0.35 }
     ];
 
     leafPos.forEach(data => {
@@ -7379,35 +7660,47 @@ function buildBerryTree(parent) {
 
 function buildCosmicTree(parent) {
     const trunkGeom = new THREE.CylinderGeometry(0.12, 0.22, 1.3, 8);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6d4c41, roughness: 0.9 });
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a2c5a, roughness: 0.9 });
     const trunk = new THREE.Mesh(trunkGeom, trunkMat);
     trunk.position.y = 0.65;
     trunk.castShadow = true;
     parent.add(trunk);
 
-    const leavesMat = new THREE.MeshStandardMaterial({ 
-        color: 0x00b4d8, 
-        emissive: 0x0077b6,
-        emissiveIntensity: 0.35,
-        roughness: 0.7,
-        flatShading: true
-    });
-
+    const colors = [0x00f0ff, 0x9b5de5, 0xf15bb5, 0x00b4d8, 0x7209b7];
     const leafNodes = [
-        { pos: new THREE.Vector3(0, 1.5, 0), size: 0.75 },
-        { pos: new THREE.Vector3(-0.4, 1.25, 0.3), size: 0.55 },
-        { pos: new THREE.Vector3(0.4, 1.35, -0.3), size: 0.58 },
-        { pos: new THREE.Vector3(0.3, 1.15, 0.4), size: 0.52 },
-        { pos: new THREE.Vector3(-0.35, 1.2, -0.35), size: 0.50 }
+        { pos: new THREE.Vector3(0, 1.5, 0), size: 0.75, color: colors[0] },
+        { pos: new THREE.Vector3(-0.4, 1.25, 0.3), size: 0.55, color: colors[1] },
+        { pos: new THREE.Vector3(0.4, 1.35, -0.3), size: 0.58, color: colors[2] },
+        { pos: new THREE.Vector3(0.3, 1.15, 0.4), size: 0.52, color: colors[3] },
+        { pos: new THREE.Vector3(-0.35, 1.2, -0.35), size: 0.50, color: colors[4] }
     ];
 
     leafNodes.forEach(node => {
-        const leafGeom = new THREE.SphereGeometry(node.size, 8, 8);
+        const leafGeom = new THREE.IcosahedronGeometry(node.size, 1);
+        const leavesMat = new THREE.MeshStandardMaterial({ 
+            color: node.color, 
+            emissive: node.color,
+            emissiveIntensity: 0.4,
+            roughness: 0.5,
+            flatShading: true
+        });
         const leaf = new THREE.Mesh(leafGeom, leavesMat);
         leaf.position.copy(node.pos);
         leaf.castShadow = true;
         parent.add(leaf);
     });
+
+    const ringGeom = new THREE.TorusGeometry(0.9, 0.04, 8, 24);
+    const ringMat = new THREE.MeshStandardMaterial({
+        color: 0xff00d0,
+        emissive: 0xff00d0,
+        emissiveIntensity: 1.2,
+        roughness: 0.1
+    });
+    const ring = new THREE.Mesh(ringGeom, ringMat);
+    ring.position.set(0, 1.35, 0);
+    ring.rotation.x = Math.PI / 2.3;
+    parent.add(ring);
 
     const fruitGeom = new THREE.SphereGeometry(0.12, 6, 6);
     const fruitColors = [0xffb703, 0xfb8500, 0xff006e];
@@ -7471,20 +7764,20 @@ function buildIceFlower(parent) {
 
 function buildIceTree(parent) {
     const trunkGeom = new THREE.CylinderGeometry(0.1, 0.2, 1.25, 6);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0xa5c4d4, metalness: 0.5, roughness: 0.1 });
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0xb0e0e6, metalness: 0.8, roughness: 0.1 });
     const trunk = new THREE.Mesh(trunkGeom, trunkMat);
     trunk.position.y = 0.6;
     trunk.castShadow = true;
     parent.add(trunk);
     
     const iceMat = new THREE.MeshPhysicalMaterial({
-        color: 0xd0f0ff,
+        color: 0xe0ffff,
         emissive: 0x00f0ff,
         emissiveIntensity: 0.8,
         roughness: 0.05,
         transmission: 0.95,
         transparent: true,
-        opacity: 0.75
+        opacity: 0.8
     });
     
     const iceNodes = [
@@ -7499,6 +7792,22 @@ function buildIceTree(parent) {
         mesh.position.copy(node.pos);
         mesh.castShadow = true;
         parent.add(mesh);
+    });
+
+    const icicleGeom = new THREE.ConeGeometry(0.06, 0.4, 4);
+    const icicleMat = iceMat;
+    const iciclePos = [
+        new THREE.Vector3(-0.25, 0.85, 0.15),
+        new THREE.Vector3(0.25, 0.88, -0.15),
+        new THREE.Vector3(0.1, 1.1, 0.3),
+        new THREE.Vector3(-0.1, 1.1, -0.3)
+    ];
+    iciclePos.forEach(pos => {
+        const icicle = new THREE.Mesh(icicleGeom, icicleMat);
+        icicle.position.copy(pos);
+        icicle.rotation.x = Math.PI; 
+        icicle.castShadow = true;
+        parent.add(icicle);
     });
 
     // 💎 新設: 青白く輝く結晶の果実「クリスタル・アイス・アップル」を追加
@@ -7554,14 +7863,14 @@ function buildDesertFlower(parent) {
 
 function buildDesertTree(parent) {
     const trunkGeom = new THREE.CylinderGeometry(0.16, 0.22, 1.4, 8);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x1b4332, roughness: 0.85 });
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.85 });
     const trunk = new THREE.Mesh(trunkGeom, trunkMat);
     trunk.position.y = 0.7;
     trunk.castShadow = true;
     parent.add(trunk);
     
     const armGeom = new THREE.CylinderGeometry(0.1, 0.1, 0.65, 8);
-    const armMat = new THREE.MeshStandardMaterial({ color: 0x1b4332, roughness: 0.85 });
+    const armMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.85 });
     
     const leftArm = new THREE.Mesh(armGeom, armMat);
     leftArm.position.set(-0.35, 0.95, 0);
@@ -7575,6 +7884,42 @@ function buildDesertTree(parent) {
     rightArm.castShadow = true;
     trunk.add(rightArm);
     
+    const spikeGeom = new THREE.ConeGeometry(0.015, 0.08, 4);
+    const spikeMat = new THREE.MeshStandardMaterial({ color: 0xffe3a0, roughness: 0.5 });
+    const spikeData = [
+        { pos: new THREE.Vector3(0.2, 0.5, 0.1), rot: new THREE.Vector3(0, 0, -Math.PI/2.5) },
+        { pos: new THREE.Vector3(-0.2, 0.4, -0.1), rot: new THREE.Vector3(0, 0, Math.PI/2.5) },
+        { pos: new THREE.Vector3(0, 0.8, 0.2), rot: new THREE.Vector3(Math.PI/2.5, 0, 0) },
+        { pos: new THREE.Vector3(0, 0.3, -0.2), rot: new THREE.Vector3(-Math.PI/2.5, 0, 0) },
+        { pos: new THREE.Vector3(-0.45, 1.1, 0.1), rot: new THREE.Vector3(0, 0, Math.PI/3) },
+        { pos: new THREE.Vector3(0.45, 1.0, -0.1), rot: new THREE.Vector3(0, 0, -Math.PI/3) }
+    ];
+    spikeData.forEach(data => {
+        const spike = new THREE.Mesh(spikeGeom, spikeMat);
+        spike.position.copy(data.pos);
+        spike.rotation.set(data.rot.x, data.rot.y, data.rot.z);
+        parent.add(spike);
+    });
+
+    const bloomGeom = new THREE.ConeGeometry(0.12, 0.18, 5);
+    const bloomMat = new THREE.MeshStandardMaterial({
+        color: 0xff4d6d,
+        emissive: 0xff4d6d,
+        emissiveIntensity: 1.0,
+        roughness: 0.3
+    });
+    const blooms = [
+        { pos: new THREE.Vector3(0, 1.42, 0), rot: new THREE.Vector3(0, 0, 0) },
+        { pos: new THREE.Vector3(-0.52, 1.25, 0), rot: new THREE.Vector3(0, 0, Math.PI/4) },
+        { pos: new THREE.Vector3(0.52, 1.15, 0), rot: new THREE.Vector3(0, 0, -Math.PI/4) }
+    ];
+    blooms.forEach(b => {
+        const bloom = new THREE.Mesh(bloomGeom, bloomMat);
+        bloom.position.copy(b.pos);
+        bloom.rotation.set(b.rot.x, b.rot.y, b.rot.z);
+        parent.add(bloom);
+    });
+
     const fruitGeom = new THREE.SphereGeometry(0.18, 8, 8);
     const fruitMat = new THREE.MeshStandardMaterial({
         color: 0xffd166,
@@ -8160,6 +8505,7 @@ function animate() {
 
 
     // 各種AIとリッチエフェクト更新
+    updateRevisitorSpawn(delta);
     updateVillagers(delta);
     updateAdorationParticles(delta);
     updateEmotions(delta);
@@ -8337,7 +8683,7 @@ function createTitleStars() {
     }
 }
 
-function startGame() {
+function startGame(isContinue = false) {
     if (gameStarted) return;
     gameStarted = true;
 
@@ -8350,8 +8696,13 @@ function startGame() {
     setTimeout(() => {
         titleEl.style.display = 'none';
         uiEl.style.display = 'block';
-        // 導入ダイアログを表示
-        setTimeout(showIntroDialogue, 600);
+        if (isContinue) {
+            isIntroFinished = true;
+            rebuildCurrentPlanetScene();
+        } else {
+            // 導入ダイアログを表示
+            setTimeout(showIntroDialogue, 600);
+        }
     }, 800);
 }
 
@@ -8647,6 +8998,7 @@ function advanceTutorialDialogue(fromIndex) {
         hasPlayedTutorial = true;
         localStorage.setItem('hasPlayedTutorial', 'true');
         stopTutorial();
+        saveGame(false);
         return;
     }
     _streamTutorialText();
@@ -9565,3 +9917,429 @@ updateVillagerCountUI();
 initControlPanelCollapse();
 updatePlanetEnvironment();
 animate();
+
+// ==========================================
+// セーブ＆ロードシステム
+// ==========================================
+
+function saveGame(showToast = false) {
+    const saveData = {
+        playerFruits: playerFruits,
+        playerInventory: playerInventory,
+        hasPlayedTutorial: hasPlayedTutorial,
+        isIntroFinished: isIntroFinished,
+        currentPlanetId: currentPlanet.id,
+        planets: {}
+    };
+
+    for (const key in planetsData) {
+        const p = planetsData[key];
+        
+        // plantsのシリアライズ
+        const serializedPlants = p.plants.map(plant => ({
+            latIndex: plant.latIndex,
+            lonIndex: plant.lonIndex,
+            scale: plant.scale,
+            targetScale: plant.targetScale,
+            age: plant.age,
+            localPos: { x: plant.localPos.x, y: plant.localPos.y, z: plant.localPos.z },
+            type: plant.type,
+            subtype: plant.subtype,
+            harvestedSeed: plant.harvestedSeed,
+            fruitProgress: plant.fruitProgress || []
+        }));
+
+        // 定住している住人（settled === true）のみシリアライズ
+        const serializedVillagers = p.activeVillagers
+            .filter(v => v.settled)
+            .map(v => ({
+                id: v.id,
+                name: v.name,
+                localPos: { x: v.localPos.x, y: v.localPos.y, z: v.localPos.z },
+                rocketStyle: v.rocketStyle,
+                settled: v.settled
+            }));
+
+        // 家のシリアライズ
+        const serializedHouses = (p.houses || []).map(h => ({
+            style: h.style,
+            localPos: { x: h.localPos.x, y: h.localPos.y, z: h.localPos.z },
+            normal: { x: h.normal.x, y: h.normal.y, z: h.normal.z }
+        }));
+
+        saveData.planets[key] = {
+            plants: serializedPlants,
+            activeVillagers: serializedVillagers,
+            completedMilestones: p.completedMilestones || [],
+            unlockedVillagerIds: p.unlockedVillagerIds || [],
+            unlockedVillagersInfo: p.unlockedVillagersInfo || {},
+            houses: serializedHouses,
+            grownGrassIndices: Array.from(p.grownGrassIndices || []),
+            plantedGridCells: Array.from(p.plantedGridCells || [])
+        };
+    }
+
+    localStorage.setItem('cosmo_crossing_save_data', JSON.stringify(saveData));
+
+    if (showToast) {
+        const toast = document.getElementById('save-toast');
+        if (toast) {
+            toast.style.display = 'block';
+            toast.style.opacity = '1';
+            // 3秒後にフェードアウト
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+    }
+}
+
+function loadGame() {
+    const raw = localStorage.getItem('cosmo_crossing_save_data');
+    if (!raw) return false;
+    try {
+        const saveData = JSON.parse(raw);
+        playerFruits = saveData.playerFruits;
+        playerInventory = saveData.playerInventory;
+        hasPlayedTutorial = saveData.hasPlayedTutorial;
+        isIntroFinished = saveData.isIntroFinished;
+
+        // 各惑星データの復元
+        for (const key in saveData.planets) {
+            const sp = saveData.planets[key];
+            const p = planetsData[key];
+            if (!p) continue;
+
+            p.completedMilestones = sp.completedMilestones || [];
+            p.unlockedVillagerIds = sp.unlockedVillagerIds || [];
+            p.unlockedVillagersInfo = sp.unlockedVillagersInfo || {};
+            p.grownGrassIndices = new Set(sp.grownGrassIndices || []);
+            p.plantedGridCells = new Set(sp.plantedGridCells || []);
+
+            // 植物オブジェクトの復元 (3Dメッシュ以外)
+            p.plants = (sp.plants || []).map(spObj => {
+                const plantGroup = new THREE.Group();
+                const visualGroup = new THREE.Group();
+                plantGroup.add(visualGroup);
+                
+                plantGroup.position.set(spObj.localPos.x, spObj.localPos.y, spObj.localPos.z);
+                const normal = plantGroup.position.clone().normalize();
+                plantGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+                
+                plantGroup.scale.set(spObj.scale, spObj.scale, spObj.scale);
+
+                const plantObj = {
+                    latIndex: spObj.latIndex,
+                    lonIndex: spObj.lonIndex,
+                    mesh: plantGroup,
+                    visualGroup: visualGroup,
+                    scale: spObj.scale,
+                    targetScale: spObj.targetScale,
+                    age: spObj.age,
+                    localPos: new THREE.Vector3(spObj.localPos.x, spObj.localPos.y, spObj.localPos.z),
+                    type: spObj.type,
+                    subtype: spObj.subtype,
+                    light: null,
+                    harvestedSeed: spObj.harvestedSeed,
+                    fruitProgress: spObj.fruitProgress || []
+                };
+
+                return plantObj;
+            });
+
+            // 家データの復元
+            p.houses = (sp.houses || []).map(sh => {
+                const houseMesh = buildHouse(sh.style);
+                houseMesh.position.set(sh.localPos.x, sh.localPos.y, sh.localPos.z);
+                const normal = new THREE.Vector3(sh.normal.x, sh.normal.y, sh.normal.z);
+                houseMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+                houseMesh.scale.set(2.5, 2.5, 2.5); // 家のベーススケール
+
+                return {
+                    style: sh.style,
+                    localPos: new THREE.Vector3(sh.localPos.x, sh.localPos.y, sh.localPos.z),
+                    normal: normal,
+                    mesh: houseMesh
+                };
+            });
+
+            // 定住した住人の復元
+            p.activeVillagers = (sp.activeVillagers || []).map(sv => {
+                const typeData = VILLAGER_TYPES[sv.id];
+                const info = VILLAGER_INFO[sv.id] || {};
+                
+                const group = new THREE.Group();
+                const visualGroup = new THREE.Group();
+                group.add(visualGroup);
+                
+                buildVillagerBody(visualGroup, typeData.color, typeData.headStyle, typeData.earColor);
+                
+                const localPos = new THREE.Vector3(sv.localPos.x, sv.localPos.y, sv.localPos.z);
+                const normal = localPos.clone().normalize();
+                
+                group.position.copy(localPos);
+                group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+                
+                const beacon = buildGuideBeacon(typeData.id);
+                beacon.position.copy(localPos).addScaledVector(normal, 1.4);
+                beacon.quaternion.copy(group.quaternion);
+                
+                return {
+                    id: sv.id,
+                    name: sv.name,
+                    typeData: typeData,
+                    group: group,
+                    visualGroup: visualGroup,
+                    beacon: beacon,
+                    localPos: localPos,
+                    state: "IDLE",
+                    settled: true,
+                    leavingTimer: 0,
+                    stateTimer: 0.0,
+                    targetPos: new THREE.Vector3(),
+                    targetPlant: null,
+                    walkCycle: 0,
+                    bounce: 0.45,
+                    happyJumpCount: 0,
+                    happyJumpTimer: 0,
+                    age: Math.random() * 100,
+                    rocketStyle: sv.rocketStyle,
+                    rocketInstance: null,
+                    hungerTimer: 20.0 + Math.random() * 20.0,
+                    stayTimer: 999999.0,
+                    warningShown: false,
+                    milestoneId: info.milestoneId,
+                    settleReqFlower: info.settleReqFlower,
+                    settleReqTree: info.settleReqTree,
+                    isRevisitor: true,
+                    hasSpokenThisVisit: false
+                };
+            });
+        }
+
+        currentPlanet = planetsData[saveData.currentPlanetId || 'artemis'];
+        return true;
+    } catch (e) {
+        console.error("Failed to load game", e);
+        return false;
+    }
+}
+
+function rebuildCurrentPlanetScene() {
+    clearPlanetStructures();
+    
+    // 植栽ライトと植物メッシュの削除 (全惑星分を一括クリア)
+    for (const key in planetsData) {
+        const p = planetsData[key];
+        p.plants.forEach(plant => {
+            if (plant.light) {
+                asteroid.remove(plant.light);
+                plant.light = null;
+            }
+            if (plant.mesh) {
+                asteroid.remove(plant.mesh);
+            }
+        });
+        
+        p.activeVillagers.forEach(v => {
+            if (v.group) asteroid.remove(v.group);
+            if (v.beacon) asteroid.remove(v.beacon);
+            if (v.rocketInstance && v.rocketInstance.mesh) {
+                asteroid.remove(v.rocketInstance.mesh);
+            }
+        });
+
+        if (p.houses) {
+            p.houses.forEach(h => {
+                if (h.mesh) asteroid.remove(h.mesh);
+            });
+        }
+    }
+    activePlantLights.length = 0;
+    
+    // 草のクリーンアップ
+    grassClumps.forEach(gc => {
+        asteroid.remove(gc.mesh);
+        gc.mesh.traverse(obj => {
+            if (obj.isMesh) {
+                obj.geometry.dispose();
+                obj.material.dispose();
+            }
+        });
+    });
+    grassClumps.length = 0;
+    
+    // 惑星テクスチャとカラーの適用
+    const newTexture = createDirtTexture(currentPlanet);
+    asteroid.material.map.dispose();
+    asteroid.material.map = newTexture;
+    asteroid.material.needsUpdate = true;
+    
+    scene.background.setHex(currentPlanet.bgColor);
+    scene.fog.color.setHex(currentPlanet.fogColor);
+    scene.fog.density = currentPlanet.fogDensity;
+    baseFogDensity = currentPlanet.fogDensity;
+    
+    sunLight.color.setHex(currentPlanet.id === "boreas" ? 0xe0f7ff : (currentPlanet.id === "helios" ? 0xfff3d1 : 0xfff8ea));
+    fillLight.color.setHex(currentPlanet.id === "boreas" ? 0x00bfff : (currentPlanet.id === "helios" ? 0xffaa00 : 0x7585ff));
+    
+    // 草の再配置
+    if (!currentPlanet.grownGrassIndices) {
+        currentPlanet.grownGrassIndices = new Set();
+    }
+    const grassCount = 2600;
+    for (let i = 0; i < grassCount; i++) {
+        const grass = createGrassClump(currentPlanet);
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        
+        const x = ASTEROID_RADIUS * Math.sin(phi) * Math.cos(theta);
+        const y = ASTEROID_RADIUS * Math.sin(phi) * Math.sin(theta);
+        const z = ASTEROID_RADIUS * Math.cos(phi);
+        
+        const pos = new THREE.Vector3(x, y, z);
+        grass.position.copy(pos);
+        const normal = pos.clone().normalize();
+        grass.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+        
+        const baseScale = 0.85 + Math.random() * 0.5;
+        const isGrown = currentPlanet.grownGrassIndices.has(i);
+        const startScale = isGrown ? baseScale : 0.0;
+        grass.scale.set(startScale, startScale, startScale);
+        asteroid.add(grass);
+
+        grassClumps.push({
+            mesh: grass,
+            scale: startScale,
+            targetScale: startScale,
+            baseScale: baseScale,
+            age: Math.random() * 100
+        });
+    }
+    
+    const portalRing = warpPortalGroup.getObjectByName("coreRing");
+    if (portalRing) {
+        portalRing.material.color.setHex(currentPlanet.id === "boreas" ? 0x00f0ff : (currentPlanet.id === "helios" ? 0xffd166 : 0xff5c8a));
+        portalRing.material.emissive.setHex(currentPlanet.id === "boreas" ? 0x00bfff : (currentPlanet.id === "helios" ? 0xffaa00 : 0xff5c8a));
+    }
+    
+    spawnPlanetStructures();
+    
+    // 植物アセットの3D再生成・配置
+    currentPlanet.plants.forEach(p => {
+        const visualGroup = p.visualGroup;
+        visualGroup.clear();
+        
+        if (p.type === 'flower') {
+            if (currentPlanet.id === "boreas") {
+                buildIceFlower(visualGroup);
+            } else if (currentPlanet.id === "helios") {
+                buildDesertFlower(visualGroup);
+            } else {
+                if (p.subtype === 1) buildStarlightLily(visualGroup);
+                else if (p.subtype === 2) buildLunaRose(visualGroup);
+                else if (p.subtype === 3) buildAuroraTulip(visualGroup);
+                else buildCosmicFlower(visualGroup);
+            }
+        } else {
+            if (currentPlanet.id === "boreas") {
+                buildIceTree(visualGroup);
+            } else if (currentPlanet.id === "helios") {
+                buildDesertTree(visualGroup);
+            } else {
+                const randVal = Math.random();
+                if (randVal < 0.5) buildCosmicTree(visualGroup);
+                else buildBerryTree(visualGroup);
+            }
+        }
+        
+        p.mesh.scale.set(p.scale, p.scale, p.scale);
+        
+        if (p.type === 'tree') {
+            const fruitMeshes = [];
+            p.mesh.traverse(obj => {
+                if (obj.isMesh && obj.name === "fruit") {
+                    fruitMeshes.push(obj);
+                }
+            });
+            
+            if (!p.fruitProgress) {
+                p.fruitProgress = new Array(fruitMeshes.length).fill(1.0);
+            }
+            
+            fruitMeshes.forEach(fruit => {
+                const idx = fruit.userData.fruitIndex ?? 0;
+                const progress = p.fruitProgress[idx] ?? 1.0;
+                const baseScale = fruit.userData.baseScale ?? 1.0;
+                
+                if (fruit.material && !fruit.userData.materialCloned) {
+                    fruit.material = fruit.material.clone();
+                    fruit.userData.materialCloned = true;
+                    fruit.userData.originalEmissiveIntensity = fruit.material.emissiveIntensity ?? 1.0;
+                }
+
+                fruit.scale.setScalar(baseScale * progress);
+                fruit.visible = (progress > 0.08);
+
+                if (progress >= 1.0) {
+                    fruit.scale.setScalar(baseScale * 1.25);
+                    if (fruit.material) {
+                        fruit.material.emissiveIntensity = fruit.userData.originalEmissiveIntensity * 1.5;
+                    }
+                } else {
+                    if (fruit.material) {
+                        fruit.material.emissiveIntensity = 0.0;
+                    }
+                }
+            });
+        }
+        
+        asteroid.add(p.mesh);
+        addPlantLight(p);
+    });
+
+    // 家メッシュの配置
+    if (currentPlanet.houses) {
+        currentPlanet.houses.forEach(h => {
+            if (h.mesh) {
+                asteroid.add(h.mesh);
+            }
+        });
+    }
+
+    // 住人メッシュの配置
+    currentPlanet.activeVillagers.forEach(v => {
+        if (v.group) {
+            asteroid.add(v.group);
+            if (v.beacon) {
+                asteroid.add(v.beacon);
+            }
+        }
+    });
+
+    updateStatsUI();
+    updatePlanetNameDisplay();
+}
+
+// セーブデータの存在確認とUIボタンの設定
+const saveBtn = document.getElementById('btn-save');
+if (saveBtn) {
+    saveBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        saveGame(true);
+    });
+}
+
+const continueBtn = document.getElementById('btn-continue');
+if (continueBtn) {
+    if (localStorage.getItem('cosmo_crossing_save_data')) {
+        continueBtn.style.display = 'block';
+    }
+    continueBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (loadGame()) {
+            startGame(true);
+        }
+    });
+}
+

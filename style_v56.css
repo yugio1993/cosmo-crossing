@@ -317,6 +317,38 @@ body {
     transform: translateY(-1px) scale(0.97);
 }
 
+/* 🌾 タネ・苗を採取するボタン */
+.btn-primary-collect {
+    background: linear-gradient(135deg, #f4a261 0%, #e76f51 100%);
+    color: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.45);
+    padding: 1.1rem 2.2rem;
+    font-family: var(--font-family);
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    border-radius: 40px;
+    cursor: pointer;
+    box-shadow: 0 8px 25px rgba(244, 162, 97, 0.5);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.btn-primary-collect:hover {
+    transform: translateY(-4px) scale(1.04);
+    box-shadow: 0 12px 30px rgba(244, 162, 97, 0.65), 0 0 20px rgba(255, 255, 255, 0.5);
+    background: linear-gradient(135deg, #ffd166 0%, #f4a261 100%);
+    color: #040510;
+}
+
+.btn-primary-collect:active {
+    transform: translateY(-1px) scale(0.97);
+}
+
+
 /* 町 隧ｱ縺励°縺代ｋ繝懊ち繝ｳ */
 .btn-talk-action {
     background: linear-gradient(135deg, #4ea8de 0%, #00bfff 100%);
@@ -1112,7 +1144,7 @@ body {
         gap: 8px;
     }
     
-    .btn-primary, .btn-primary-tree, .btn-primary-harvest, .btn-talk-action, .btn-present-action, .btn-warp-action {
+    .btn-primary, .btn-primary-tree, .btn-primary-harvest, .btn-primary-collect, .btn-talk-action, .btn-present-action, .btn-warp-action {
         padding: 0.7rem 1.1rem;
         font-size: 0.88rem;
         border-radius: 20px;
